@@ -2489,17 +2489,106 @@ if (_stepBtn) {
   });
 }
 
-// Emoji picker — human reactions.
+// Emoji picker — human reactions. Each emoji has a pool of 10 lines that cycle randomly,
+// avoiding the most-recent line so consecutive clicks of the same button feel fresh.
+const EMOJI_LINES = {
+  '👏': [
+    "Nice one.", "Tidy that, mate.", "Class move.", "Look at the brain on you.",
+    "Pure quality, that.", "Top shelf.", "Standing ovation, get the trumpets.",
+    "Behave yourself, that was lovely.", "Had to be done.", "Oh mama, gorgeous play.",
+  ],
+  '🔥': [
+    "Absolute weapon!", "Flatten 'em!", "Cooking with petrol.", "Sheer carnage.",
+    "Opponents in shambles.", "Boomshakalaka.", "Setting the table on fire.",
+    "Take a bow, you menace.", "That's a war crime.", "Somebody call the council.",
+  ],
+  '🤣': [
+    "Absolute melt.", "I'm wheezing.", "What was that, exactly?",
+    "Laugh? I nearly bought a round.", "Pure comedy, no notes.", "Pop that on YouTube.",
+    "Dignity: sold.", "Never recovering from that.", "Bin it, mate.",
+    "Shakespeare couldn't write that.",
+  ],
+  '😬': [
+    "Ouch, mate.", "Yikes on bikes.", "That's gonna sting.", "Felt that one in me bones.",
+    "Hurts to watch.", "Eyes off, eyes off.", "Emotional damage.", "I need a lie down.",
+    "Hold this for a sec.", "That was unprovoked.",
+  ],
+  '💀': [
+    "RIP.", "Get the priest.", "Game's over for them, send flowers.", "Toe-tagged.",
+    "Buried with full honours.", "The morgue is full.", "F in the chat.",
+    "Gone but not forgotten.", "Notify their next of kin.", "Cause of death: that.",
+  ],
+  '🙄': [
+    "Was that it?", "Astonishing nothing.", "Riveting stuff, truly.",
+    "I've seen better in a Blackpool car park.", "Granny does it better.",
+    "Whelmed. Just whelmed.", "Cheers for that, I suppose.", "Slow clap.",
+    "We're all so impressed.", "Yawn factory.",
+  ],
+  '🥲': [
+    "Bless ya.", "It's alright, sweetheart.", "We've all been there.",
+    "Pop the kettle on, eh.", "There, there.", "Chin up, troops.", "Tough crowd, this.",
+    "Nan would be proud (probably).", "Brave attempt.", "Walk it off, champ.",
+  ],
+  '👑': [
+    "Royalty.", "Bow to the monarch.", "Coronation imminent.", "Get a throne in here.",
+    "Your majesty, please.", "Top of the food chain.", "All hail.", "Sceptre energy.",
+    "Born to rule.", "The realm is yours.",
+  ],
+  '🤡': [
+    "Clown energy.", "Honk honk.", "Get back in the car, all of you.",
+    "Big top tonight, is it?", "Three-ring solo performance.", "Make-up's running, love.",
+    "Bozo behaviour.", "The circus called, they want their act back.",
+    "Comedy gold (the bad kind).", "Send in the clowns — oh wait.",
+  ],
+  '🍵': [
+    "Brew incoming.", "Get the kettle on.", "Tea duty for you, pal.",
+    "Builders, two sugars, quick smart.", "The realm demands a brew.", "Cuppa o'clock.",
+    "Dunk a digestive while you're at it.", "Earl Grey, strictly.",
+    "I take mine milky, ta.", "Less crying, more boiling.",
+  ],
+};
+const _emojiLastIdx = {}; // remembers last picked index per emoji to avoid repeats
+function pickEmojiLine(emoji, fallback) {
+  const pool = EMOJI_LINES[emoji];
+  if (!pool || !pool.length) return fallback || '';
+  const last = _emojiLastIdx[emoji];
+  let idx = Math.floor(Math.random() * pool.length);
+  if (pool.length > 1 && idx === last) idx = (idx + 1) % pool.length;
+  _emojiLastIdx[emoji] = idx;
+  return pool[idx];
+}
 document.querySelectorAll('#emoji-picker .emoji-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!state || state.phase !== 'play') return;
     const emoji = btn.dataset.emoji;
-    const text  = btn.dataset.text || '';
+    const text  = pickEmojiLine(emoji, btn.dataset.text || '');
     showReactionBubble(myPlayerId, { emoji, text }, true);
   });
 });
 
 $('lobby').classList.add('active');
+
+// Device detection — tag the body with phone | tablet | desktop so CSS hooks (and any future
+// JS-driven adaptations) can target the device class. We combine viewport width with a touch
+// check rather than UA sniffing (modern iPads claim a desktop UA in Safari). Re-runs on resize.
+(function detectDevice() {
+  function classify() {
+    const w = window.innerWidth;
+    const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    let device;
+    if (w <= 640)        device = 'phone';
+    else if (w <= 1024)  device = 'tablet';
+    else                 device = isTouch ? 'tablet' : 'desktop';
+    document.body.dataset.device = device;
+    document.body.dataset.touch  = isTouch ? 'true' : 'false';
+  }
+  classify();
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(classify, 150);
+  });
+})();
 
 // If the page was opened with ?room=ABC123 (a shared invite link), drop the user straight into
 // the Join Online flow with the code prefilled — they only need a name and one click.
