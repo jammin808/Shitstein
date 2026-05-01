@@ -29,7 +29,7 @@ const CARD_INFO = {
   '10': '<strong>10 — Burn!</strong><br>A 10 of any suit can be played on <em>anything</em> to clear the pack — including breaking out of a pickup chain. (Still rejected while skips from an 8 are queued.) <em>In a chain, however, a 10 must be in numerical sequence</em> like any other card — a 10 isn\'t wild as a chain link.',
   'J':  '<strong>Jack.</strong><br>A Jack can only be played on another Jack, or on a lower rank in the same suit. <strong>Black Jacks</strong> (♠ ♣) add <strong>+5</strong> to a pickup chain. <strong>Red Jacks</strong> (♥ ♦) cancel the most recent black Jack and its 5 cards.',
   'Q':  '<strong>Q — Reverse &amp; lock.</strong><br>A Queen can <em>only</em> be played on another Queen or in suit. Flips the direction of play (with two players, the same player goes again). Once a Q is on top, it can only be followed by another Queen, a higher rank in the Q\'s suit, a 2, a 10, or an Ace.',
-  'K':  '<strong>K — Royal demand.</strong><br>A King can only be played on another King or in suit. <em>Exception:</em> a K cannot follow a freshly-placed 2, 8, or Jack — the previous player must have had a turn to react first (e.g., taken the chain or been skipped). <strong>When chaining off a K in your own play</strong>, the legal followers are: another K (pair), <em>any card of the K\'s suit</em>, a 10 of any suit (burns the pile), or the same-suit Ace (high-Ace ±1). Played solo? Pick up one extra card from the deck as penalty.',
+  'K':  '<strong>K — Royal demand.</strong><br>A King can only be played on another King or in suit. <em>Exceptions:</em> a K cannot follow a freshly-placed 8 or Jack — the previous player must have had a turn to react first. A K <em>can</em> follow a freshly-placed 2, but only if it\'s the same suit. <strong>When chaining off a K in your own play</strong>, the legal followers are: another K (pair), <em>any card of the K\'s suit</em>, a 10 of any suit (burns the pile), or the same-suit Ace (high-Ace ±1). Played solo? Pick up one extra card from the deck as penalty.',
   'A':  '<strong>A — Wild lead, suit-pivot in chains.</strong><br>An Ace of any suit can lead at any time, except after a 2, a black Jack, or an 8. <em>You name the called suit as soon as you click the Ace</em> — the next player must follow that suit. In a chain, the Ace also acts as a suit-pivot: the called suit becomes the chain\'s direction, and the Ace can be high (14) or low (1), so the legal next chain link is another Ace (pair), the <strong>K of the called suit</strong> (high), or the <strong>2 of the called suit</strong> (low). E.g. A♥ called as ♠ → K♠ or 2♠ chains.',
 };
 
@@ -284,12 +284,14 @@ function canPlayCard(card, state) {
     return card.suit === matchSuit;
   }
   // K-card rule: a King can only be played on another King or in suit. Additionally, a K cannot
-  // play on a freshly-placed 2 / 8 / J — the previous player must have had a turn between the
-  // 2/8/J landing and now (i.e., they took the chain, were skipped, etc.).
+  // play on a freshly-placed 8 or Jack — the previous player must have had a turn between the
+  // 8/J landing and now (i.e., they took the chain, were skipped, etc.). For a freshly-placed
+  // 2 the rule is relaxed: a SAME-SUIT K is allowed (the suit-match still rules out cross-suit
+  // Kings, so the same-suit return at the bottom carries that case).
   if (card.rank === 'K') {
     if (top.rank === 'K') return true;
     const fresh = state.turnCount === (state.topPlayedAtTurn + 1);
-    if (fresh && (top.rank === '2' || top.rank === '8' || top.rank === 'J')) return false;
+    if (fresh && (top.rank === '8' || top.rank === 'J')) return false;
     return card.suit === matchSuit;
   }
   // Jack rule: J plays only on another Jack, or higher rank in the same suit (any gap).
