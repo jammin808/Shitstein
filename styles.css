@@ -1195,7 +1195,13 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
     gap: 0;
     position: relative;
     z-index: 1;
+    /* Floor on the me-area's height so the action-log spanning rows 1+2 in column 3
+       can't pull row 2 taller than this and create an empty gap below the me-area. */
+    min-height: 280px;
   }
+  /* Action bar aligns to top of its grid cell so it sits flush against the me-area
+     above with no extra space above the buttons. */
+  #action-bar { align-self: start; }
   .me-header { margin-bottom: 0; flex: 0 0 auto; }
   .reserve { padding: 2px 10px; margin: 0; border-radius: 8px; flex: 0 0 auto; }
   .reserve-label { margin-bottom: 0; }
@@ -1233,7 +1239,11 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
     grid-area: log;
     position: sticky;
     top: 76px;
-    max-height: calc(100vh - 90px);
+    /* Fixed height so the log can never push the centre column's grid rows taller than
+       their content — that was creating an empty gap between the me-area and the action
+       bar. The log scrolls internally when entries exceed this. */
+    height: calc(var(--pile-card-h) + 280px);
+    max-height: calc(100vh - 160px);
     margin: 0;
     width: auto;
     right: auto;

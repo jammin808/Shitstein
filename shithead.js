@@ -137,9 +137,10 @@ function topDiscard(state) {
 // (with a clean state — no pickup chain, no skip pending, no ace named-suit override)?
 // Used for face-up "domino" chains where each card plays on the previous one.
 function canPlayOnCard(card, prevCard) {
-  // K-chain exception (must run BEFORE the strict 10-rule): a 10 of any suit follows a King
-  // in a chain. The same-suit any-rank K-extension below covers other ranks.
-  if (prevCard.rank === 'K' && card.rank === '10') return true;
+  // K-chain exception (must run BEFORE the strict 10/Ace rules): after a King, an Ace of
+  // ANY suit chains (the Ace pivots to whatever suit the player names at click time), and
+  // a 10 of any suit chains too (matches the standard K-on-top rule).
+  if (prevCard.rank === 'K' && (card.rank === 'A' || card.rank === '10')) return true;
   // 10-card chain rule (highest priority): a 10 in a chain must follow numerical sequence —
   // either same rank or strictly consecutive same-suit (±1). 10 is wild only as a single-card
   // lead, NOT as a chain link. Even after a Q or 9, the 10 needs ±1 same-suit / pair.
