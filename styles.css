@@ -12,8 +12,8 @@
   --shadow-lg:   0 12px 32px rgba(0,0,0,0.35);
   --card-w:      80px;
   --card-h:      112px;
-  --pile-card-w: 100px;
-  --pile-card-h: 140px;
+  --pile-card-w: 124px;
+  --pile-card-h: 174px;
 }
 
 * { box-sizing: border-box; }
@@ -918,8 +918,8 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
       "opps me-area   log"
       "opps actionBar playHint";
     column-gap: 14px;
-    row-gap: 10px;
-    padding: 10px 14px;
+    row-gap: 4px;
+    padding: 8px 14px;
     align-items: start;
     max-width: 1500px;
     margin: 0 auto;
@@ -951,10 +951,29 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .opponent-stacks .card.small { --card-w: 36px; --card-h: 50px; }
   .opponent-hand .card.tiny    { --card-w: 20px; --card-h: 28px; }
 
-  /* CENTRE column — middle row, me-area, action-bar (the play buttons) */
-  .middle      { grid-area: middle; margin: 4px 0; min-height: var(--pile-card-h); }
-  .me-area     { grid-area: me-area; margin-top: 0; max-width: none; }
-  #action-bar  { grid-area: actionBar; margin: 0; max-width: none; width: 100%; padding: 10px 16px; }
+  /* CENTRE column — middle row, me-area, action-bar (the play buttons) — compressed
+     vertically so the whole column fits in a normal laptop viewport without scrolling */
+  .middle      { grid-area: middle; margin: 0; min-height: var(--pile-card-h); }
+  .me-area     {
+    grid-area: me-area;
+    margin-top: 0;
+    max-width: none;
+    padding: 6px 14px 8px;
+  }
+  .me-header { margin-bottom: 4px; }
+  .reserve { padding: 4px 10px 4px; margin-bottom: 6px; border-radius: 8px; }
+  .reserve-label { margin-bottom: 2px; }
+  .hand-section { padding: 4px 12px 6px; border-radius: 8px; }
+  .hand-label { margin-bottom: 2px; }
+  .emoji-picker { margin-top: 6px; padding: 3px 8px; border-radius: 8px; }
+  #action-bar  {
+    grid-area: actionBar;
+    margin: 0;
+    max-width: none;
+    width: 100%;
+    padding: 8px 16px;
+  }
+  .action-btn { padding: 9px 22px; }
 
   /* RIGHT column — action log spans the top two rows; play-hint sits in row 3 underneath */
   .action-log {
