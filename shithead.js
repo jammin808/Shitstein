@@ -431,16 +431,15 @@ function playCards(state, source, indices, aceSuit) {
     const c = cards[i];
     state.discard.push(c);
     if (checkBurn(state)) {
-      if (c.rank === '10') {
-        tenBurn = true;
-        // A 10 clears the pack — and that includes any active pickup chain or queued skips.
-        state.pickupChain = 0;
-        state.pendingBlackJacks = 0;
-        state.pendingSkips = 0;
-        state.lastEightPlayer = null;
-      } else {
-        fourOfKindBurn = true;
-      }
+      if (c.rank === '10') tenBurn = true;
+      else                 fourOfKindBurn = true;
+      // Any burn (10 or four-of-a-kind) clears the pack AND wipes any chain/skip state. This
+      // matters most for a four-Jack burn — the cancel/add bookkeeping on pickupChain may have
+      // left a residue from cards that are now in the burn pile, so reset to a clean slate.
+      state.pickupChain = 0;
+      state.pendingBlackJacks = 0;
+      state.pendingSkips = 0;
+      state.lastEightPlayer = null;
       state.burned += state.discard.length;
       state.discard = [];
       goAgain = true;
@@ -568,15 +567,13 @@ function blindFlip(state, faceDownIdx) {
     state.discard.push(card);
     let goAgain = false, burned = false, fourOfKindBurn = false, tenBurn = false;
     if (checkBurn(state)) {
-      if (card.rank === '10') {
-        tenBurn = true;
-        state.pickupChain = 0;
-        state.pendingBlackJacks = 0;
-        state.pendingSkips = 0;
-        state.lastEightPlayer = null;
-      } else {
-        fourOfKindBurn = true;
-      }
+      if (card.rank === '10') tenBurn = true;
+      else                    fourOfKindBurn = true;
+      // Any burn clears the pack AND chain/skip state (see playCards for rationale).
+      state.pickupChain = 0;
+      state.pendingBlackJacks = 0;
+      state.pendingSkips = 0;
+      state.lastEightPlayer = null;
       state.burned += state.discard.length;
       state.discard = [];
       goAgain = true;
@@ -1858,7 +1855,12 @@ function backToLobby() {
   selected     = [];
   swapSelected = { hand: null, faceUp: null };
   if (net) { try { net.cleanup(); } catch (e) {} net = null; }
-  document.querySelectorAll('.passover, .modal-overlay').forEach(el => el.remove());
+  // Clear any DOM ephemera left over from the previous game so a new game starts clean:
+  // floating reaction bubbles, thinking dots, burn flashes, modals/passover screens, and
+  // the right-rail action log feed.
+  document.querySelectorAll('.passover, .modal-overlay, .reaction, .thinking, .burn-flash, .disconnect-banner').forEach(el => el.remove());
+  const log = $('action-log');
+  if (log) log.innerHTML = '';
   $('table').classList.remove('active');
   $('lobby').classList.add('active');
   $('mode-config').classList.add('hidden');
