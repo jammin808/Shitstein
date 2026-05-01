@@ -267,6 +267,11 @@ function canPlayCard(card, state) {
   const matchSuit = (top.rank === 'A' && state.aceSuit) ? state.aceSuit : top.suit;
   const matchTop = { rank: top.rank, suit: matchSuit };
 
+  // Top is an Ace with a named suit: any card of the called suit follows (any rank). This
+  // must short-circuit BEFORE the J/8 card-specific rules below, otherwise their "higher in
+  // suit" check rejects e.g. J♠ on A-called-Spades since J=11 < A=14.
+  if (top.rank === 'A' && state.aceSuit && card.suit === state.aceSuit) return true;
+
   // (2 is handled above — it's a wild lead.)
   // 8-card rule: an 8 plays only on another 8, or higher rank in the same suit (any gap).
   if (card.rank === '8') {
