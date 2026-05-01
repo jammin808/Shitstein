@@ -71,7 +71,7 @@ function shuffle(arr) {
 
 function newGame(playerNames) {
   if (playerNames.length < 2 || playerNames.length > 5) {
-    throw new Error('Shithead requires 2–5 players');
+    throw new Error('Shitstein requires 2–5 players');
   }
   const deck = shuffle(makeDeck());
   const players = playerNames.map((name, i) => ({
