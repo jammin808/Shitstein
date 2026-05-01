@@ -106,6 +106,188 @@ function newGame(playerNames) {
   };
 }
 
+// =================== AUDIO (8-bit synth, chiptune-style) ===================
+// Tiny self-contained Web Audio module: a master gain feeding music + sfx sub-buses.
+// All sounds are synthesised on the fly — no audio files. The music is a chiptune-ish
+// loop with a square-wave melody and a triangle-wave bass; sfx are short blip sequences.
+const Sound = (() => {
+  let ctx = null, master = null, musicGain = null, sfxGain = null;
+  let musicSchedTimer = null;
+  let musicLoopEnd = 0;
+  let muted        = (typeof localStorage !== 'undefined' && localStorage.getItem('shitstein-muted') === '1');
+  let musicEnabled = (typeof localStorage === 'undefined' || localStorage.getItem('shitstein-music') !== '0');
+
+  function init() {
+    if (ctx) return ctx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = muted ? 0 : 1;
+    master.connect(ctx.destination);
+    musicGain = ctx.createGain();
+    musicGain.gain.value = 0.10;
+    musicGain.connect(master);
+    sfxGain = ctx.createGain();
+    sfxGain.gain.value = 0.45;
+    sfxGain.connect(master);
+    return ctx;
+  }
+  function resume() {
+    if (!ctx) init();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+  }
+
+  function blip(freq, dur, type, gain, when) {
+    if (!ctx) init();
+    if (!ctx || muted) return;
+    const t = ctx.currentTime + (when || 0);
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain || 0.25, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g);
+    g.connect(sfxGain);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+  function blipSeq(notes, type, gain, gap) {
+    let when = 0;
+    notes.forEach(([f, d]) => { blip(f, d, type, gain, when); when += d + (gap || 0); });
+  }
+
+  // Sweep helper for "whoosh"-style sfx.
+  function sweep(fromHz, toHz, dur, type, gain, when) {
+    if (!ctx) init();
+    if (!ctx || muted) return;
+    const t = ctx.currentTime + (when || 0);
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type || 'sawtooth';
+    osc.frequency.setValueAtTime(fromHz, t);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(40, toHz), t + dur);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain || 0.3, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g);
+    g.connect(sfxGain);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+
+  const SFX = {
+    play:           () => blipSeq([[523, 0.05], [659, 0.06]], 'square', 0.22),
+    chain:          () => blipSeq([[523, 0.04], [659, 0.04], [784, 0.05]], 'square', 0.18),
+    burn:           () => { sweep(900, 120, 0.45, 'sawtooth', 0.32); blip(220, 0.18, 'square', 0.22, 0.12); },
+    pickup:         () => blipSeq([[294, 0.10], [247, 0.14]], 'square', 0.25),
+    take:           () => blipSeq([[330, 0.08], [262, 0.12]], 'triangle', 0.25),
+    skip:           () => blipSeq([[523, 0.04], [392, 0.05], [330, 0.06]], 'square', 0.20),
+    reverse:        () => blipSeq([[523, 0.06], [659, 0.06], [784, 0.06], [659, 0.06], [523, 0.08]], 'square', 0.20),
+    select:         () => blip(880, 0.03, 'square', 0.10),
+    deselect:       () => blip(440, 0.03, 'square', 0.08),
+    newgame:        () => blipSeq([[262, 0.10], [330, 0.10], [392, 0.10], [523, 0.20]], 'square', 0.25),
+    gameover:       () => blipSeq([[523, 0.20], [494, 0.20], [440, 0.40]], 'square', 0.30),
+    reaction:       () => blip(880, 0.04, 'triangle', 0.15),
+    sort:           () => blip(659, 0.03, 'triangle', 0.10),
+    'special-2':      () => blipSeq([[523, 0.05], [659, 0.06], [784, 0.06]], 'square', 0.25),
+    'special-7':      () => blipSeq([[392, 0.06], [330, 0.06], [262, 0.08]], 'triangle', 0.25),
+    'special-8':      () => blipSeq([[440, 0.04], [494, 0.04], [554, 0.04], [620, 0.06]], 'square', 0.20),
+    'special-Q':      () => blipSeq([[784, 0.06], [587, 0.06], [392, 0.08]], 'square', 0.25),
+    'special-K':      () => blipSeq([[523, 0.06], [659, 0.06], [784, 0.10], [1047, 0.16]], 'square', 0.30),
+    'special-A':      () => blipSeq([[1047, 0.04], [1319, 0.04], [1568, 0.06], [2093, 0.08]], 'square', 0.20),
+    'special-Jblack': () => blipSeq([[220, 0.08], [165, 0.10]], 'sawtooth', 0.30),
+    'special-Jred':   () => blipSeq([[659, 0.06], [659, 0.06]], 'square', 0.20, 0.05),
+  };
+  function sfx(name) {
+    if (muted) return;
+    if (!ctx) init();
+    resume();
+    if (SFX[name]) SFX[name]();
+  }
+
+  // Music: simple chiptune in A minor. 8 bars of melody + bass, ~14 s loop at 110 BPM.
+  // Notes are arrays of [Hz, beats]. The melody uses squarish blips, the bass is
+  // a softer triangle so they don't clash.
+  const TEMPO = 110;
+  const BEAT = 60 / TEMPO;
+  const MELODY = [
+    [659, 0.5], [784, 0.5], [880, 0.5], [784, 0.5],
+    [659, 0.5], [523, 0.5], [659, 0.5], [880, 0.5],
+    [987, 0.5], [880, 0.5], [784, 0.5], [659, 0.5],
+    [587, 1.0], [659, 1.0],
+    [659, 0.5], [784, 0.5], [880, 0.5], [987, 0.5],
+    [1047, 1.0], [880, 1.0],
+    [784, 0.5], [659, 0.5], [587, 0.5], [659, 0.5],
+    [523, 1.0], [659, 1.0],
+  ];
+  const BASS = [
+    [110, 1.0], [165, 1.0], [110, 1.0], [165, 1.0],
+    [98, 1.0],  [147, 1.0], [98, 1.0],  [147, 1.0],
+    [87, 1.0],  [131, 1.0], [82, 1.0],  [123, 1.0],
+    [110, 2.0], [165, 2.0],
+  ];
+
+  function scheduleSeq(seq, type, gain, startTime) {
+    let t = startTime;
+    seq.forEach(([freq, beats]) => {
+      const dur = beats * BEAT;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(gain, t + 0.01);
+      g.gain.linearRampToValueAtTime(gain * 0.6, t + dur * 0.6);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur - 0.01);
+      osc.connect(g);
+      g.connect(musicGain);
+      osc.start(t);
+      osc.stop(t + dur);
+      t += dur;
+    });
+    return t;
+  }
+  function startMusic() {
+    if (!musicEnabled || muted) return;
+    if (!ctx) init();
+    if (!ctx) return;
+    resume();
+    if (musicSchedTimer) return;
+    const loopOnce = () => {
+      if (muted || !musicEnabled) { musicSchedTimer = null; return; }
+      const start = Math.max(ctx.currentTime + 0.05, musicLoopEnd);
+      const melodyEnd = scheduleSeq(MELODY, 'square', 0.09, start);
+      scheduleSeq(BASS, 'triangle', 0.18, start);
+      musicLoopEnd = melodyEnd;
+      const loopDur = melodyEnd - ctx.currentTime;
+      musicSchedTimer = setTimeout(loopOnce, Math.max(500, (loopDur - 0.4) * 1000));
+    };
+    loopOnce();
+  }
+  function stopMusic() {
+    if (musicSchedTimer) clearTimeout(musicSchedTimer);
+    musicSchedTimer = null;
+    musicLoopEnd = 0;
+  }
+  function setMuted(m) {
+    muted = !!m;
+    if (typeof localStorage !== 'undefined') localStorage.setItem('shitstein-muted', muted ? '1' : '0');
+    if (master && ctx) master.gain.linearRampToValueAtTime(muted ? 0 : 1, ctx.currentTime + 0.1);
+    if (muted) stopMusic(); else startMusic();
+  }
+  function setMusicEnabled(on) {
+    musicEnabled = !!on;
+    if (typeof localStorage !== 'undefined') localStorage.setItem('shitstein-music', musicEnabled ? '1' : '0');
+    if (musicEnabled) startMusic(); else stopMusic();
+  }
+
+  return { init, resume, sfx, startMusic, stopMusic, setMuted, setMusicEnabled,
+           isMuted: () => muted, isMusicEnabled: () => musicEnabled };
+})();
+
 function startPlay(state) {
   // Player with the lowest non-special hand card starts.
   let best = null;
@@ -1668,12 +1850,14 @@ function onCardClick(source, idx) {
     // and every link that came after it, preserving the chain invariant.
     const pos = selected.findIndex(s => s.source === source && s.idx === idx);
     selected = selected.slice(0, pos);
+    Sound.sfx('deselect');
     renderTable();
     return;
   }
   const me = state.players[myPlayerId];
   const card = me[source][idx];
   if (!canSelect(source, card)) return;
+  Sound.sfx('select');
 
   // Aces: name the called suit at click time so subsequent chain choices are validated against
   // the called suit (high or low). The same prompt covers an Ace at any chain position.
@@ -1829,7 +2013,16 @@ function postMoveProcessing() {
   renderTable();
   // Visual: flash a burn over the discard if the last move triggered one.
   const tags = (state && state.lastEventTags) || [];
-  if (tags.includes('burn') || tags.includes('fourOfKind')) flashBurnOnDiscard();
+  if (tags.includes('burn') || tags.includes('fourOfKind')) {
+    flashBurnOnDiscard();
+    Sound.sfx('burn');
+  }
+  // Audio cues for discrete game events. Special-card sfx fires from playSpecialCardFX
+  // below; here we cover the non-special outcomes.
+  if (tags.includes('pickUp'))     Sound.sfx('pickup');
+  if (tags.includes('skip'))       Sound.sfx('skip');
+  if (tags.includes('chainTaken')) Sound.sfx('take');
+  if (tags.includes('reverse'))    Sound.sfx('reverse');
   // Mark the freshly-played top card so it animates in. For a chain fan the topmost card
   // is the LAST .card in DOM order (it has the highest z-index); for a single play it's
   // the only card.
@@ -2065,7 +2258,7 @@ function showReactionBubble(playerId, reaction, fromHuman) {
 }
 
 // Apply a unique animation to the just-played top card based on its rank/suit. Each special
-// card gets its own FX: a floating stamp + a card-level pulse / spin / shimmer.
+// card gets its own FX: a floating stamp + a card-level pulse / spin / shimmer + 8-bit sfx.
 function playSpecialCardFX(topCardEl) {
   if (!state || !state.lastPlayCards || !state.lastPlayCards.length) return;
   const last = state.lastPlayCards[state.lastPlayCards.length - 1];
@@ -2081,6 +2274,8 @@ function playSpecialCardFX(topCardEl) {
     if (last.suit === 'S' || last.suit === 'C') { cls = 'fx-Jblack'; stamp = '+5'; }
     else                                          { cls = 'fx-Jred';   stamp = '✖'; }
   }
+  if (cls) Sound.sfx(cls.replace('fx-', 'special-'));
+  else     Sound.sfx(state.lastPlayCards.length > 1 ? 'chain' : 'play');
   if (!cls) return;
   topCardEl.classList.add(cls);
   setTimeout(() => topCardEl.classList.remove(cls), 1100);
@@ -2142,6 +2337,7 @@ function showPassScreen(targetPlayer, suffix) {
 // --------- game over ---------
 function showGameOver() {
   document.querySelectorAll('.passover').forEach(el => el.remove());
+  Sound.sfx('gameover');
   const shithead = state.players[state.shithead];
   const winners  = state.finishedOrder.map(id => state.players[id].name);
   const insultFn = INSULTS[Math.floor(Math.random() * INSULTS.length)];
@@ -2390,6 +2586,7 @@ function buildLocalConfig(cfg) {
 }
 
 function startLocalGame(names, humansArr, primaryHumanId) {
+  Sound.sfx('newgame');
   state = newGame(names);
   state.players.forEach((p, i) => p.isHuman = humansArr[i]);
   myPlayerId   = primaryHumanId;
@@ -2930,6 +3127,7 @@ document.querySelectorAll('#emoji-picker .emoji-btn').forEach(btn => {
     const emoji = btn.dataset.emoji;
     const text  = pickEmojiLine(emoji, btn.dataset.text || '');
     showReactionBubble(myPlayerId, { emoji, text }, true);
+    Sound.sfx('reaction');
   });
 });
 
@@ -2939,11 +3137,40 @@ if (handSortEl) {
   handSortEl.value = handSortMode;
   handSortEl.addEventListener('change', () => {
     handSortMode = handSortEl.value;
+    Sound.sfx('sort');
     if (state) renderTable();
   });
 }
 
 $('lobby').classList.add('active');
+
+// Audio bootstrapping. Browsers block AudioContext until the user interacts; the first
+// click anywhere on the page initialises and resumes audio, then kicks off the loop.
+const muteBtn = $('btn-mute');
+function refreshMuteIcon() {
+  if (!muteBtn) return;
+  muteBtn.textContent = Sound.isMuted() ? '🔇' : '🔊';
+  muteBtn.setAttribute('title', Sound.isMuted() ? 'Sound off — click to unmute' : 'Sound on — click to mute');
+}
+refreshMuteIcon();
+if (muteBtn) {
+  muteBtn.addEventListener('click', () => {
+    Sound.setMuted(!Sound.isMuted());
+    refreshMuteIcon();
+    if (!Sound.isMuted()) { Sound.resume(); Sound.startMusic(); }
+  });
+}
+document.addEventListener('click', function firstAudioGesture() {
+  Sound.init();
+  Sound.resume();
+  if (!Sound.isMuted()) Sound.startMusic();
+  document.removeEventListener('click', firstAudioGesture);
+}, { once: true, capture: true });
+// Tab visibility: pause/resume music politely so it doesn't keep playing in the background.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) Sound.stopMusic();
+  else if (!Sound.isMuted()) Sound.startMusic();
+});
 
 // Device detection — tag the body with phone | tablet | desktop so CSS hooks (and any future
 // JS-driven adaptations) can target the device class. We combine viewport width with a touch
