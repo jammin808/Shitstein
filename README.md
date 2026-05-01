@@ -49,5 +49,6 @@ Common Shithead variants that are **not** in play: 8 = invisible, 3 = mirror. (S
 
 - Vanilla JS rules engine, AI, and UI in `shithead.js`.
 - `index.html` + `styles.css` — felt-table layout with hand-crafted SVG cards.
-- `images/felt.png` — Canva-generated emerald linen-weave texture.
+- `images/felt.webp` — Canva-generated emerald linen-weave texture (downscaled + WebP-compressed from the original PNG).
+- `music/` — drop royalty-free MP3s here for in-game background music (auto-detected, with a topbar toggle to flip between your tracks and the built-in synth chiptune). See [music/README.md](music/README.md) for details.
 - WebRTC peer-to-peer multiplayer via [PeerJS](https://peerjs.com).

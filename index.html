@@ -29,6 +29,7 @@
         <span class="toggle-label">Auto-play</span>
       </label>
       <button id="btn-mute" class="ghost" title="Toggle sound" aria-label="Toggle sound">🔊</button>
+      <button id="btn-music-src" class="ghost" title="Toggle music source" aria-label="Toggle music source" style="display:none;">🎵</button>
       <button id="btn-rules" class="ghost" title="Open the rules sidebar">📖 Rules</button>
       <button id="btn-new" class="ghost" title="Start over">↻ New Game</button>
     </div>
@@ -240,8 +241,7 @@
   <div id="modal-root"></div>
   <div id="tooltip" class="tooltip"></div>
 
-  <!-- PeerJS for online (optional, fully client-side WebRTC) -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="shithead.js"></script>
+  <!-- PeerJS is lazy-loaded on demand from shithead.js when the user hosts/joins online. -->
+  <script src="shithead.js" defer></script>
 </body>
 </html>

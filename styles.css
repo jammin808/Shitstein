@@ -25,7 +25,7 @@ body {
   background:
     radial-gradient(ellipse at 50% 0%,   rgba(255,255,255,0.10), transparent 55%),
     radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.45),       transparent 60%),
-    url("images/felt.png") center/600px 600px repeat,
+    url("images/felt.webp") center/600px 600px repeat,
     linear-gradient(135deg, var(--felt-deep), var(--felt));
   color: var(--cream);
   min-height: 100vh;

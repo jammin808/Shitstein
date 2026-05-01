@@ -117,6 +117,20 @@ const Sound = (() => {
   let muted        = (typeof localStorage !== 'undefined' && localStorage.getItem('shitstein-muted') === '1');
   let musicEnabled = (typeof localStorage === 'undefined' || localStorage.getItem('shitstein-music') !== '0');
 
+  // MP3 background-music support. Drop files into /music and either list them in
+  // music/manifest.json or name them 1.mp3, 2.mp3, ... — see music/README.md.
+  // musicMode: 'mp3' or 'synth'. Defaults to 'mp3' if any tracks are discovered,
+  // otherwise 'synth'. User's explicit choice (via the topbar button) is persisted.
+  const MUSIC_DIR = 'music/';
+  const PROBE_LIMIT = 20;
+  const PROBE_EXTS = ['.mp3', '.mpeg', '.mpg'];
+  let mp3Tracks = [];                                // [{ url, name }]
+  let mp3Index = 0;
+  let mp3Audio = null;                               // HTMLAudioElement
+  let mp3Source = null;                              // MediaElementAudioSourceNode
+  let musicMode = (typeof localStorage !== 'undefined' ? localStorage.getItem('shitstein-music-mode') : null);
+  if (musicMode !== 'mp3' && musicMode !== 'synth') musicMode = null; // resolved after discovery
+
   let musicFilter = null;   // LPF on the tonal voices only — sweeps with intensity
   let tonalGain   = null;   // melody / harmony / bass route here (filter applies)
   let drumBus     = null;   // kick / snare / hat route here (filter bypassed)
@@ -653,14 +667,98 @@ const Sound = (() => {
     sec.hats.forEach(beat   => drumHat  (startTime + beat * BEAT, 0.35 * dg));
     return sectionEnd;
   }
-  function startMusic() {
-    if (!musicEnabled || muted) return;
+  // ---- MP3 track discovery (manifest first, then numeric probing) -------------
+  async function fetchManifest() {
+    try {
+      const r = await fetch(MUSIC_DIR + 'manifest.json', { cache: 'no-cache' });
+      if (!r.ok) return [];
+      const j = await r.json();
+      if (Array.isArray(j)) return j.filter(s => typeof s === 'string');
+      if (j && Array.isArray(j.tracks)) return j.tracks.filter(s => typeof s === 'string');
+      return [];
+    } catch (_) { return []; }
+  }
+  async function probeNumericTracks() {
+    const found = [];
+    for (let i = 1; i <= PROBE_LIMIT; i++) {
+      let hit = null;
+      for (const ext of PROBE_EXTS) {
+        const url = MUSIC_DIR + i + ext;
+        try {
+          const r = await fetch(url, { method: 'HEAD' });
+          if (r.ok) { hit = i + ext; break; }
+        } catch (_) { /* try next extension */ }
+      }
+      if (!hit) break;
+      found.push(hit);
+    }
+    return found;
+  }
+  const tracksReadyPromise = (async () => {
+    let names = await fetchManifest();
+    if (!names.length) names = await probeNumericTracks();
+    mp3Tracks = names
+      .filter(n => typeof n === 'string' && n.length > 0)
+      .map(n => ({ url: MUSIC_DIR + n, name: n.replace(/\.[^.]+$/, '') }));
+    // Resolve default mode now that we know whether tracks exist.
+    if (musicMode === null) musicMode = mp3Tracks.length ? 'mp3' : 'synth';
+    else if (musicMode === 'mp3' && !mp3Tracks.length) musicMode = 'synth';
+    return mp3Tracks.slice();
+  })();
+
+  // ---- MP3 playback (routes through musicGain so master/mute Just Work) -------
+  function ensureMp3Audio() {
+    if (mp3Audio) return mp3Audio;
     if (!ctx) init();
-    if (!ctx) return;
+    if (!ctx) return null;
+    mp3Audio = new Audio();
+    mp3Audio.preload = 'auto';
+    mp3Audio.addEventListener('ended', () => {
+      if (!mp3Tracks.length) return;
+      mp3Index = (mp3Index + 1) % mp3Tracks.length;
+      loadAndPlayCurrentMp3();
+    });
+    mp3Audio.addEventListener('error', () => {
+      // Skip broken file, advance after a short pause to avoid tight error loops.
+      if (!mp3Tracks.length) return;
+      mp3Index = (mp3Index + 1) % mp3Tracks.length;
+      setTimeout(loadAndPlayCurrentMp3, 250);
+    });
+    try {
+      mp3Source = ctx.createMediaElementSource(mp3Audio);
+      mp3Source.connect(musicGain);
+    } catch (_) { /* already wired */ }
+    return mp3Audio;
+  }
+  function loadAndPlayCurrentMp3() {
+    if (!mp3Tracks.length || musicMode !== 'mp3' || muted || !musicEnabled) return;
+    const a = ensureMp3Audio();
+    if (!a) return;
+    const t = mp3Tracks[mp3Index % mp3Tracks.length];
+    const want = new URL(t.url, location.href).href;
+    if (a.src !== want) a.src = t.url;
+    const p = a.play();
+    if (p && typeof p.catch === 'function') p.catch(() => { /* autoplay blocked, retry on next user gesture */ });
+  }
+  function startMp3Music() {
+    if (!musicEnabled || muted || !mp3Tracks.length) return false;
+    if (!ctx) init();
+    if (!ctx) return false;
     resume();
+    loadAndPlayCurrentMp3();
+    return true;
+  }
+  function stopMp3Music() {
+    if (mp3Audio && !mp3Audio.paused) {
+      try { mp3Audio.pause(); } catch (_) {}
+    }
+  }
+
+  // ---- Synth music (the existing scheduler) ----------------------------------
+  function startSynthMusic() {
     if (musicSchedTimer) return;
     const loop = () => {
-      if (muted || !musicEnabled) { musicSchedTimer = null; return; }
+      if (muted || !musicEnabled || musicMode !== 'synth') { musicSchedTimer = null; return; }
       const intensity = computeIntensity();
       const section = pickSection(intensity);
       const start = Math.max(ctx.currentTime + 0.05, musicLoopEnd);
@@ -672,10 +770,56 @@ const Sound = (() => {
     };
     loop();
   }
-  function stopMusic() {
+  function stopSynthMusic() {
     if (musicSchedTimer) clearTimeout(musicSchedTimer);
     musicSchedTimer = null;
     musicLoopEnd = 0;
+  }
+
+  // ---- Public start/stop dispatch by mode ------------------------------------
+  function startMusic() {
+    if (!musicEnabled || muted) return;
+    if (!ctx) init();
+    if (!ctx) return;
+    resume();
+    if (musicMode === null) {
+      // Discovery hasn't resolved yet — start once it does.
+      tracksReadyPromise.then(() => { if (musicEnabled && !muted) startMusic(); });
+      return;
+    }
+    if (musicMode === 'mp3' && mp3Tracks.length) {
+      stopSynthMusic();
+      startMp3Music();
+    } else {
+      stopMp3Music();
+      startSynthMusic();
+    }
+  }
+  function stopMusic() {
+    stopSynthMusic();
+    stopMp3Music();
+  }
+  function setMusicMode(m) {
+    if (m !== 'mp3' && m !== 'synth') return;
+    if (m === 'mp3' && !mp3Tracks.length) return;
+    if (musicMode === m) return;
+    musicMode = m;
+    if (typeof localStorage !== 'undefined') localStorage.setItem('shitstein-music-mode', musicMode);
+    if (!musicEnabled || muted || !ctx) return;
+    // Smooth ~200ms swap: ramp musicGain down, switch source, ramp back up.
+    const targetVol = 0.12;
+    const t = ctx.currentTime;
+    musicGain.gain.cancelScheduledValues(t);
+    musicGain.gain.setValueAtTime(musicGain.gain.value, t);
+    musicGain.gain.linearRampToValueAtTime(0, t + 0.1);
+    setTimeout(() => {
+      stopMusic();
+      startMusic();
+      const t2 = ctx.currentTime;
+      musicGain.gain.cancelScheduledValues(t2);
+      musicGain.gain.setValueAtTime(0, t2);
+      musicGain.gain.linearRampToValueAtTime(targetVol, t2 + 0.1);
+    }, 110);
   }
   function setMuted(m) {
     muted = !!m;
@@ -701,7 +845,10 @@ const Sound = (() => {
   };
 
   return { init, resume, sfx, whistle, startMusic, stopMusic, setMuted, setMusicEnabled,
-           setExtraIntensity, isMuted: () => muted, isMusicEnabled: () => musicEnabled };
+           setExtraIntensity, isMuted: () => muted, isMusicEnabled: () => musicEnabled,
+           setMusicMode, getMusicMode: () => musicMode,
+           getMp3Tracks: () => mp3Tracks.slice(),
+           tracksReady: () => tracksReadyPromise };
 })();
 
 function startPlay(state) {
@@ -3068,6 +3215,22 @@ function startLocalGame(names, humansArr, primaryHumanId) {
 
 // =================== ONLINE MULTIPLAYER (PeerJS) ===================
 
+const PEERJS_SRC = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+let peerJsLoader = null;
+function loadPeerJS() {
+  if (typeof Peer !== 'undefined') return Promise.resolve();
+  if (peerJsLoader) return peerJsLoader;
+  peerJsLoader = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = PEERJS_SRC;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => { peerJsLoader = null; reject(new Error('Failed to load PeerJS from ' + PEERJS_SRC)); };
+    document.head.appendChild(s);
+  });
+  return peerJsLoader;
+}
+
 // PeerJS connection options. We provide BOTH STUN and TURN because peers behind symmetric
 // NAT or strict firewalls need a TURN relay to actually exchange media — STUN alone fails
 // silently for those users. The TURN credentials are the public ones PeerJS itself ships
@@ -3127,8 +3290,13 @@ function buildHostConfig(cfg) {
     <button class="primary" id="cfg-host">Create Room</button>
     <div id="host-room" class="hidden" style="margin-top:18px;"></div>
   `;
-  $('cfg-host').addEventListener('click', () => {
-    if (typeof Peer === 'undefined') return alert('PeerJS failed to load. Check your network.');
+  $('cfg-host').addEventListener('click', async () => {
+    const btn = $('cfg-host');
+    const prevText = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try { await loadPeerJS(); }
+    catch (_) { btn.disabled = false; btn.textContent = prevText; return alert('PeerJS failed to load. Check your network.'); }
+    btn.disabled = false; btn.textContent = prevText;
     const name = ($('cfg-name').value.trim() || 'Host').slice(0, 16);
     startHosting(name);
   });
@@ -3316,8 +3484,13 @@ function buildJoinConfig(cfg) {
     <button class="primary" id="cfg-join">Join</button>
     <div id="join-status" class="muted" style="margin-top:10px;font-size:13px;"></div>
   `;
-  $('cfg-join').addEventListener('click', () => {
-    if (typeof Peer === 'undefined') return alert('PeerJS failed to load. Check your network.');
+  $('cfg-join').addEventListener('click', async () => {
+    const btn = $('cfg-join');
+    const prevText = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try { await loadPeerJS(); }
+    catch (_) { btn.disabled = false; btn.textContent = prevText; return alert('PeerJS failed to load. Check your network.'); }
+    btn.disabled = false; btn.textContent = prevText;
     const name = ($('cfg-name').value.trim() || 'Player').slice(0, 16);
     const code = $('cfg-code').value.trim();
     if (!code) return alert('Enter a room code first.');
@@ -3627,6 +3800,33 @@ if (muteBtn) {
     Sound.setMuted(!Sound.isMuted());
     refreshMuteIcon();
     if (!Sound.isMuted()) { Sound.resume(); Sound.startMusic(); }
+  });
+}
+
+// Music-source toggle (MP3 ↔ Synth). The button stays hidden until track discovery
+// finishes and we know whether any MP3s exist in /music.
+const musicSrcBtn = $('btn-music-src');
+function refreshMusicSrcBtn() {
+  if (!musicSrcBtn) return;
+  const tracks = Sound.getMp3Tracks();
+  if (!tracks.length) { musicSrcBtn.style.display = 'none'; return; }
+  musicSrcBtn.style.display = '';
+  const mode = Sound.getMusicMode();
+  if (mode === 'mp3') {
+    musicSrcBtn.textContent = '🎵 MP3';
+    musicSrcBtn.title = `Music: MP3 (${tracks.length} track${tracks.length === 1 ? '' : 's'}). Click for synth.`;
+  } else {
+    musicSrcBtn.textContent = '🎹 Synth';
+    musicSrcBtn.title = 'Music: synth. Click for MP3.';
+  }
+}
+Sound.tracksReady().then(refreshMusicSrcBtn);
+if (musicSrcBtn) {
+  musicSrcBtn.addEventListener('click', () => {
+    Sound.resume();
+    const next = Sound.getMusicMode() === 'mp3' ? 'synth' : 'mp3';
+    Sound.setMusicMode(next);
+    refreshMusicSrcBtn();
   });
 }
 document.addEventListener('click', function firstAudioGesture() {
