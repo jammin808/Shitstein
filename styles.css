@@ -384,8 +384,22 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   opacity: 0.85;
   font-style: italic;
 }
-.me-stacks { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.me-stacks { display: flex; flex-direction: column; gap: 0; align-items: center; }
 .stack-row { display: flex; gap: 8px; justify-content: center; }
+/* Bigger reserve cards (vs the standard small size used in opponents). The player's own
+   reserve gets readable cards even when stowed — small is 38×54 by default; this bumps
+   them to 66×92 so the rank/suit are easy to scan. */
+.me-area .stacks-blind .card.small,
+.me-area .stacks-up    .card.small {
+  --card-w: 66px;
+  --card-h: 92px;
+}
+/* Face-up cards overlay the face-down cards by 85%, giving a stacked-pile look — face-up
+   on top with the back of the face-down cards peeking out at the top (15%). When the
+   reserve becomes the active source, face-up cards expand to full size and the overlap
+   is removed so they sit cleanly below the face-down row. */
+.stacks-up { margin-top: -78px; position: relative; z-index: 2; }
+.reserve.faceup-active .stacks-up { margin-top: 6px; z-index: 1; }
 
 /* The hand sits in its own elevated panel — bigger, brighter background, brighter label. The
    contrast with the recessed reserve panel makes "what's playable now" unambiguous. */
@@ -961,14 +975,12 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .opponent-stacks .card.small { --card-w: 36px; --card-h: 50px; }
   .opponent-hand .card.tiny    { --card-w: 20px; --card-h: 28px; }
 
-  /* CENTRE column — bigger cards, distinctive sunken-felt panel for the play area, near-zero
-     vertical gap between the play panel and the me-area below it (they touch). */
+  /* CENTRE column — bigger cards, distinctive sunken-felt panel for the play area. Vertical
+     gap between every section is squeezed to the minimum so the column packs tight. */
   .middle {
     grid-area: middle;
     margin: 0;
     min-height: var(--pile-card-h);
-    /* Distinctive sunken-felt look: darker green wash, gold accent ring, inset shadow.
-       Reads as a dedicated playing surface separate from the surrounding table. */
     background:
       radial-gradient(ellipse at 50% 35%, rgba(0,0,0,0.10), rgba(0,0,0,0.42) 90%),
       linear-gradient(135deg, rgba(31, 93, 58, 0.55), rgba(15, 58, 35, 0.65));
@@ -979,27 +991,27 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
       inset 0 4px 16px rgba(0,0,0,0.40),
       inset 0 -1px 0 rgba(255,255,255,0.04),
       0 2px 14px rgba(0,0,0,0.20);
-    padding: 12px 18px 14px;
+    padding: 8px 18px 8px;
     gap: 36px;
   }
   .me-area     {
     grid-area: me-area;
     margin-top: 0;
     max-width: none;
-    padding: 6px 14px 8px;
+    padding: 4px 14px 4px;
     border-radius: 0 0 14px 14px;
   }
-  .me-header { margin-bottom: 2px; }
-  .reserve { padding: 2px 10px 4px; margin-bottom: 4px; border-radius: 8px; }
-  .reserve-label { margin-bottom: 2px; }
-  .hand-section { padding: 2px 12px 4px; border-radius: 8px; }
-  .hand-label { margin-bottom: 2px; }
+  .me-header { margin-bottom: 0; }
+  .reserve { padding: 2px 10px 2px; margin-bottom: 2px; border-radius: 8px; }
+  .reserve-label { margin-bottom: 0; }
+  .hand-section { padding: 2px 12px 2px; border-radius: 8px; }
+  .hand-label { margin-bottom: 0; }
   #action-bar  {
     grid-area: actionBar;
-    margin: 6px 0 0;
+    margin: 4px 0 0;
     max-width: none;
     width: 100%;
-    padding: 8px 14px;
+    padding: 6px 14px;
     gap: 10px;
   }
   .action-buttons { gap: 8px; }

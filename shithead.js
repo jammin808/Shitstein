@@ -1283,9 +1283,13 @@ function renderTable() {
   // Reserve panel: the label/hint shows ONLY when the reserve is the active play source —
   // i.e. the player's hand & deck are both empty and they're about to play face-up or
   // face-down. The cards themselves stay visible at all times, just unlabelled.
+  // The 'faceup-active' class additionally tells the CSS to drop the face-up overlay so
+  // face-up cards expand to full size beneath the face-down row when they're about to be
+  // played.
   const reserveEl = document.querySelector('.reserve');
   if (reserveEl) {
     reserveEl.classList.toggle('reserve-active', myActive === 'faceUp' || myActive === 'faceDown');
+    reserveEl.classList.toggle('faceup-active', myActive === 'faceUp');
   }
 
   // ---- Face-down row ----
