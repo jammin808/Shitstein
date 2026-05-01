@@ -30,7 +30,7 @@ const CARD_INFO = {
   'J':  '<strong>Jack.</strong><br>A Jack can only be played on another Jack, or on a lower rank in the same suit. <strong>Black Jacks</strong> (♠ ♣) add <strong>+5</strong> to a pickup chain. <strong>Red Jacks</strong> (♥ ♦) cancel the most recent black Jack and its 5 cards.',
   'Q':  '<strong>Q — Reverse &amp; lock.</strong><br>A Queen can <em>only</em> be played on another Queen or in suit. Flips the direction of play (with two players, the same player goes again). Once a Q is on top, it can only be followed by another Queen, a higher rank in the Q\'s suit, a 2, a 10, or an Ace.',
   'K':  '<strong>K — Royal demand.</strong><br>A King can only be played on another King or in suit. <em>Exception:</em> a K cannot follow a freshly-placed 2, 8, or Jack — the previous player must have had a turn to react first (e.g., taken the chain or been skipped). When a K is on top (or you\'re chaining off one), the legal followers are: another King (paired), a card of the same suit, or an Ace. Played solo? Pick up one extra card from the deck as penalty.',
-  'A':  '<strong>A — Wild lead.</strong><br>An Ace of any suit can lead at any time, except after a 2, a black Jack, or an 8. You name the suit the next player must follow (any rank in that suit). <em>In a chain, however, an Ace must follow numerical sequence</em> — same rank (Ace pair) or strictly consecutive same-suit (Ace ↔ same-suit King). It is NOT wild as a chain link, and the card following an Ace in a chain must also be in sequence.',
+  'A':  '<strong>A — Wild lead, suit-pivot in chains.</strong><br>An Ace of any suit can lead at any time, except after a 2, a black Jack, or an 8. <em>You name the called suit as soon as you click the Ace</em> — the next player must follow that suit. In a chain, the Ace also acts as a suit-pivot: the called suit becomes the chain\'s direction, and the Ace can be high (14) or low (1), so the legal next chain link is another Ace (pair), the <strong>K of the called suit</strong> (high), or the <strong>2 of the called suit</strong> (low). E.g. A♥ called as ♠ → K♠ or 2♠ chains.',
 };
 
 const INSULTS = [
@@ -1257,8 +1257,19 @@ function canSelect(source, card) {
   // Unified chain rule (hand AND face-up): each new card must legally play on the
   // previously-selected card. Same-rank stacks, K-chains, runs (up or down), and any
   // creative mix of those all flow through canPlayOnCard.
-  const lastSel = selected[selected.length - 1];
+  const lastSel  = selected[selected.length - 1];
   const lastCard = me[lastSel.source][lastSel.idx];
+
+  // House rule: when the previous selection is an Ace whose called suit was named at click
+  // time, the Ace behaves as if it were of the called suit AND its value can be high (14) or
+  // low (1). The next chain card is therefore either another Ace (pair), or a card of the
+  // called suit with rank 13 (K — high Ace neighbour) or 2 (low Ace neighbour).
+  if (lastCard.rank === 'A' && lastSel.calledSuit) {
+    if (card.rank === 'A') return true;
+    if (card.suit !== lastSel.calledSuit) return false;
+    const v = RANK_VAL[card.rank];
+    return v === 13 || v === 2;
+  }
   return canPlayOnCard(card, lastCard);
 }
 
@@ -1375,13 +1386,23 @@ function onCardClick(source, idx) {
     // and every link that came after it, preserving the chain invariant.
     const pos = selected.findIndex(s => s.source === source && s.idx === idx);
     selected = selected.slice(0, pos);
-  } else {
-    const me = state.players[myPlayerId];
-    const card = me[source][idx];
-    if (canSelect(source, card)) {
-      selected.push({ source, idx });
-    }
+    renderTable();
+    return;
   }
+  const me = state.players[myPlayerId];
+  const card = me[source][idx];
+  if (!canSelect(source, card)) return;
+
+  // Aces: name the called suit at click time so subsequent chain choices are validated against
+  // the called suit (high or low). The same prompt covers an Ace at any chain position.
+  if (card.rank === 'A') {
+    askAceSuit((suit) => {
+      selected.push({ source, idx, calledSuit: suit });
+      renderTable();
+    });
+    return;
+  }
+  selected.push({ source, idx });
   renderTable();
 }
 function onPlayClick() {
@@ -1390,22 +1411,18 @@ function onPlayClick() {
     const me = state.players[myPlayerId];
     const source  = selected[0].source;
     const indices = selected.map(s => s.idx);
-    const cards = indices.map(i => me[source][i]);
-    const lastIsAce = cards[cards.length - 1].rank === 'A';
-    const anyAce    = cards.some(c => c.rank === 'A');
-    if (lastIsAce) {
-      // Last card is an Ace — its suit-naming will matter for the next player.
-      askAceSuit((suit) => {
-        selected = [];
-        sendOrApplyMove({ type: 'play', source, indices, aceSuit: suit });
-      });
-      return;
+    const cards   = indices.map(i => me[source][i]);
+    const anyAce  = cards.some(c => c.rank === 'A');
+    // The last-played Ace's called suit (chosen at click time) drives state.aceSuit for the
+    // next player. If the chain ends on a non-Ace, the engine clears aceSuit anyway, but it
+    // still needs a valid suit string when any Ace is in the play.
+    let aceSuit = null;
+    for (let i = selected.length - 1; i >= 0; i--) {
+      if (cards[i].rank === 'A') { aceSuit = selected[i].calledSuit || 'S'; break; }
     }
     selected = [];
-    // Buried Aces: the engine still requires aceSuit, but the named suit gets cleared by the
-    // non-Ace card that lands on top. Pass any valid suit.
     sendOrApplyMove(anyAce
-      ? { type: 'play', source, indices, aceSuit: 'S' }
+      ? { type: 'play', source, indices, aceSuit: aceSuit || 'S' }
       : { type: 'play', source, indices });
   }
 }
