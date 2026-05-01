@@ -898,20 +898,37 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
  *  Plus a `pointer: coarse` block for touch-only enhancements.
  * ============================================================ */
 
-/* ---- Desktop three-column grid: opponents | play | log ---- */
+/* ---- Desktop three-column grid (≥ 1100px) ----
+   Three equal columns so the page reads as visually balanced. Capped at 1500px on very
+   wide screens so the centre column doesn't sprawl.
+
+   Layout:
+   +-----------+-----------+-----------+
+   | opponents | middle    | log       |
+   |           | me-area   | log       |
+   |           | actionBar | playHint  |
+   +-----------+-----------+-----------+
+*/
 @media (min-width: 1100px) {
   #table {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr) 260px;
-    grid-template-rows: auto auto auto auto;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      "opps middle    log"
+      "opps me-area   log"
+      "opps actionBar playHint";
     column-gap: 14px;
-    row-gap: 8px;
-    padding: 10px 12px;
+    row-gap: 10px;
+    padding: 10px 14px;
     align-items: start;
+    max-width: 1500px;
+    margin: 0 auto;
+    width: 100%;
   }
+
+  /* LEFT column — opponents stacked vertically, sticky-scrolling */
   .opponents {
-    grid-column: 1;
-    grid-row: 1 / -1;
+    grid-area: opps;
     flex-direction: column;
     flex-wrap: nowrap;
     align-items: stretch;
@@ -926,35 +943,43 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .opponent {
     min-width: 0;
     width: 100%;
-    padding: 8px 10px;
+    padding: 10px 12px;
   }
-  .opponent-name { font-size: 14px; }
+  .opponent-name { font-size: 15px; }
   .opponent-counts { font-size: 12px; }
-  .opponent-stacks { min-height: 46px; }
-  .opponent-stacks .card.small { --card-w: 32px; --card-h: 46px; }
-  .opponent-hand .card.tiny    { --card-w: 18px; --card-h: 26px; }
+  .opponent-stacks { min-height: 50px; }
+  .opponent-stacks .card.small { --card-w: 36px; --card-h: 50px; }
+  .opponent-hand .card.tiny    { --card-w: 20px; --card-h: 28px; }
 
-  /* Centre column rows. The middle row + play-hint sit at top, then me-area, then the
-     play buttons row at the very bottom — directly under the emoji chat strip. */
-  .middle      { grid-column: 2; grid-row: 1; margin: 4px 0 4px; min-height: var(--pile-card-h); }
-  .play-hint   { grid-column: 2; grid-row: 2; margin: 0 auto; max-width: 720px; width: 100%; }
-  .me-area     { grid-column: 2; grid-row: 3; margin-top: 0; max-width: none; }
-  #action-bar  { grid-column: 2; grid-row: 4; margin: 0 auto; max-width: 720px; width: 100%; padding: 10px 16px; }
+  /* CENTRE column — middle row, me-area, action-bar (the play buttons) */
+  .middle      { grid-area: middle; margin: 4px 0; min-height: var(--pile-card-h); }
+  .me-area     { grid-area: me-area; margin-top: 0; max-width: none; }
+  #action-bar  { grid-area: actionBar; margin: 0; max-width: none; width: 100%; padding: 10px 16px; }
 
+  /* RIGHT column — action log spans the top two rows; play-hint sits in row 3 underneath */
   .action-log {
-    grid-column: 3;
-    grid-row: 1 / -1;
-    position: sticky;
-    top: 76px;
-    width: auto;
+    grid-area: log;
+    position: relative;
+    top: auto;
     right: auto;
-    max-height: calc(100vh - 90px);
+    width: auto;
+    max-height: 100%;
     margin: 0;
+    align-self: stretch;
   }
-  /* Compact emoji buttons on desktop so the row fits in the centre column at lower widths. */
-  .emoji-btn { width: 30px; height: 30px; font-size: 15px; }
-  /* The right-rail action log already shows the play recap, so the inline event-log inside
-     the action-bar would just duplicate it and push the buttons off-centre. Hide it. */
+  .play-hint {
+    grid-area: playHint;
+    margin: 0;
+    max-width: none;
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  /* Smaller-card hand cards mean smaller emoji row works too */
+  .emoji-btn { width: 32px; height: 32px; font-size: 16px; }
+  /* Right-rail action log carries the recap; the inline event-log would duplicate it */
   .event-log { display: none; }
 }
 
