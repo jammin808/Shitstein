@@ -1039,6 +1039,77 @@ let actionLog    = [];         // [{ player, name, html, ts }, ...] running feed
 let lastDirectionRendered = 1; // for animation triggering
 let net          = null;       // multiplayer adapter
 let swapSelected = { hand: null, faceUp: null };
+let handSortMode = 'rank';        // 'rank' | 'pairs' | 'suit' | 'chains'
+
+const SUIT_ORDER = { S: 0, H: 1, D: 2, C: 3 };
+
+// Sort the hand for display. Returns an array of { card, idx } where idx is the original
+// position in me.hand (so click handlers still target the engine's index, not the visual
+// slot). Mode controls grouping:
+//   'rank'   — pure ascending rank, then suit
+//   'pairs'  — same-rank groups clustered, biggest groups first
+//   'suit'   — group by suit, ascending rank within each suit
+//   'chains' — group cards that can chain together (same rank OR same-suit ±1)
+function sortHandForDisplay(handWithIdx, mode) {
+  const items = handWithIdx.slice();
+  if (mode === 'rank' || !mode) {
+    return items.sort((a, b) =>
+      RANK_VAL[a.card.rank] - RANK_VAL[b.card.rank] ||
+      SUIT_ORDER[a.card.suit] - SUIT_ORDER[b.card.suit]
+    );
+  }
+  if (mode === 'pairs') {
+    const groups = new Map();
+    items.forEach(it => {
+      const k = it.card.rank;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(it);
+    });
+    const arr = [...groups.values()];
+    arr.forEach(g => g.sort((a, b) => SUIT_ORDER[a.card.suit] - SUIT_ORDER[b.card.suit]));
+    arr.sort((a, b) => b.length - a.length || RANK_VAL[a[0].card.rank] - RANK_VAL[b[0].card.rank]);
+    return arr.flat();
+  }
+  if (mode === 'suit') {
+    return items.sort((a, b) =>
+      SUIT_ORDER[a.card.suit] - SUIT_ORDER[b.card.suit] ||
+      RANK_VAL[a.card.rank] - RANK_VAL[b.card.rank]
+    );
+  }
+  if (mode === 'chains') {
+    // Union-find: any two cards with same rank, or same suit ±1, are in the same chain.
+    const n = items.length;
+    const parent = items.map((_, i) => i);
+    const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    const union = (i, j) => { const pi = find(i), pj = find(j); if (pi !== pj) parent[pi] = pj; };
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const a = items[i].card, b = items[j].card;
+        const sameRank = a.rank === b.rank;
+        const sameSuitAdj = a.suit === b.suit && Math.abs(RANK_VAL[a.rank] - RANK_VAL[b.rank]) === 1;
+        // Low-Ace neighbour: A↔2 same suit
+        const aceLow = a.suit === b.suit && (
+          (a.rank === 'A' && b.rank === '2') || (a.rank === '2' && b.rank === 'A')
+        );
+        if (sameRank || sameSuitAdj || aceLow) union(i, j);
+      }
+    }
+    const groups = new Map();
+    items.forEach((it, i) => {
+      const r = find(i);
+      if (!groups.has(r)) groups.set(r, []);
+      groups.get(r).push(it);
+    });
+    const arr = [...groups.values()];
+    arr.forEach(g => g.sort((a, b) =>
+      RANK_VAL[a.card.rank] - RANK_VAL[b.card.rank] ||
+      SUIT_ORDER[a.card.suit] - SUIT_ORDER[b.card.suit]
+    ));
+    arr.sort((a, b) => b.length - a.length || RANK_VAL[a[0].card.rank] - RANK_VAL[b[0].card.rank]);
+    return arr.flat();
+  }
+  return items;
+}
 
 const $  = (id) => document.getElementById(id);
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -1331,6 +1402,15 @@ function renderTable() {
 
   // ---- Hand row ----
   const handEl = $('me-hand');
+  // FLIP animation: snapshot positions of existing cards by their stable key (rank+suit+
+  // original-index) so we can animate cards sliding to new positions when sort/order
+  // changes. New cards (e.g. dealt from the deck) appear without an old position and
+  // therefore animate in via the card-land mechanism only if they land on the discard.
+  const oldRects = new Map();
+  Array.from(handEl.children).forEach(el => {
+    const key = el.dataset.cardKey;
+    if (key) oldRects.set(key, el.getBoundingClientRect());
+  });
   handEl.innerHTML = '';
   if (me.hand.length === 0 && state.phase === 'play' && myActive !== 'hand') {
     const note = document.createElement('div');
@@ -1342,8 +1422,13 @@ function renderTable() {
         : '— you are out! —';
     handEl.appendChild(note);
   }
-  me.hand.forEach((c, i) => {
+  // Sort the hand for display only — the actual indices into me.hand stay stable so click
+  // handlers refer to the engine's index, not the visual position.
+  const handWithIdx = me.hand.map((c, i) => ({ card: c, idx: i }));
+  const sortedHand = sortHandForDisplay(handWithIdx, handSortMode);
+  sortedHand.forEach(({ card: c, idx: i }) => {
     const card = renderCard(c);
+    card.dataset.cardKey = `${c.rank}${c.suit}-${i}`;
     if (state.phase === 'swap') {
       card.classList.add('clickable');
       if (swapSelected.hand === i) card.classList.add('selected');
@@ -1358,6 +1443,24 @@ function renderTable() {
       }
     }
     handEl.appendChild(card);
+  });
+  // FLIP — invert + play.
+  Array.from(handEl.children).forEach(el => {
+    const key = el.dataset.cardKey;
+    if (!key) return;
+    const oldRect = oldRects.get(key);
+    if (!oldRect) return;
+    const newRect = el.getBoundingClientRect();
+    const dx = oldRect.left - newRect.left;
+    const dy = oldRect.top - newRect.top;
+    if (dx === 0 && dy === 0) return;
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    el.style.transition = 'none';
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform 0.34s cubic-bezier(0.34, 1.2, 0.64, 1), filter 0.13s ease';
+      el.style.transform = '';
+      setTimeout(() => { el.style.transition = ''; el.style.transform = ''; }, 360);
+    });
   });
 
   renderActionButtons();
@@ -2792,6 +2895,16 @@ document.querySelectorAll('#emoji-picker .emoji-btn').forEach(btn => {
     showReactionBubble(myPlayerId, { emoji, text }, true);
   });
 });
+
+// Hand sort selector — changing it re-renders with FLIP animation moving cards into place.
+const handSortEl = $('hand-sort');
+if (handSortEl) {
+  handSortEl.value = handSortMode;
+  handSortEl.addEventListener('change', () => {
+    handSortMode = handSortEl.value;
+    if (state) renderTable();
+  });
+}
 
 $('lobby').classList.add('active');
 

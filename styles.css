@@ -417,7 +417,36 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   font-weight: 700;
   color: var(--accent);
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
+.hand-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0.5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.65);
+}
+.hand-sort label { font-weight: 600; opacity: 0.8; }
+.hand-sort select {
+  background: rgba(0,0,0,0.45);
+  color: var(--cream);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+}
+.hand-sort select:hover { border-color: var(--accent); }
 .hand {
   display: flex;
   gap: 6px;
@@ -1104,13 +1133,21 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
     border: 1px solid rgba(212, 134, 42, 0.35);
     border-radius: 16px 16px 0 0;
     border-bottom: none;
+    /* Inset shadows only — no outer drop-shadow that would cast onto the me-area below
+       and look like a gap between the panels. */
     box-shadow:
       inset 0 4px 16px rgba(0,0,0,0.40),
-      inset 0 -1px 0 rgba(255,255,255,0.04),
-      0 2px 14px rgba(0,0,0,0.20);
+      inset 0 -1px 0 rgba(255,255,255,0.04);
     padding: 8px 18px;
     gap: 36px;
   }
+  /* Stop me-area's flex children from growing/shrinking — every section sizes to its
+     content, gaps stay at exactly 0, no rubber-banding when the hand changes. */
+  .me-area > * { flex: 0 0 auto; }
+  /* Reserve panel keeps a stable height regardless of whether the face-up cards have all
+     been played. The min-height equals the visible height of the overlay (small card +
+     overlap + padding) so the panel doesn't suddenly collapse when reserve empties. */
+  .reserve { min-height: 110px; box-sizing: border-box; }
   .me-area {
     grid-area: me-area;
     margin-top: 0;

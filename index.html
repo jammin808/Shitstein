@@ -131,7 +131,18 @@
         </div>
       </div>
       <div class="hand-section">
-        <div class="hand-label">Your hand</div>
+        <div class="hand-label">
+          <span>Your hand</span>
+          <span class="hand-sort">
+            <label>Sort:</label>
+            <select id="hand-sort">
+              <option value="rank">Low → High</option>
+              <option value="pairs">Pairs</option>
+              <option value="suit">Suit Runs</option>
+              <option value="chains">Chained Runs</option>
+            </select>
+          </span>
+        </div>
         <div class="hand" id="me-hand"></div>
       </div>
     </div>
