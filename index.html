@@ -118,6 +118,8 @@
       <div id="turn-indicator" class="turn-indicator"></div>
     </div>
 
+    <div id="play-hint" class="play-hint" aria-live="polite"></div>
+
     <div id="action-bar" class="action-bar">
       <button id="btn-play"   class="action-btn primary"  >Play Selected</button>
       <button id="btn-pickup" class="action-btn warning"  >Pick Up Pile</button>
@@ -132,11 +134,17 @@
         <div class="me-label" id="me-label">You</div>
         <div class="me-hint"  id="me-hint"></div>
       </div>
-      <div class="me-stacks">
-        <div class="stack-row stacks-blind" id="me-faceDown"></div>
-        <div class="stack-row stacks-up"    id="me-faceUp"></div>
+      <div class="reserve">
+        <div class="reserve-label">Your reserve <span class="reserve-hint">— face-up cards play after your hand &amp; the deck are empty</span></div>
+        <div class="me-stacks">
+          <div class="stack-row stacks-blind" id="me-faceDown"></div>
+          <div class="stack-row stacks-up"    id="me-faceUp"></div>
+        </div>
       </div>
-      <div class="hand" id="me-hand"></div>
+      <div class="hand-section">
+        <div class="hand-label">Your hand</div>
+        <div class="hand" id="me-hand"></div>
+      </div>
       <div class="emoji-picker" id="emoji-picker">
         <span class="emoji-picker-label">React:</span>
         <button class="emoji-btn" data-emoji="👏" data-text="Nice one." title="Nice one.">👏</button>

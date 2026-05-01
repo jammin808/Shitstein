@@ -1236,9 +1236,17 @@ function renderTable() {
 
   // ---- Me header ----
   $('me-label').textContent = `${me.name}${(state.current === myPlayerId && state.phase === 'play') ? ' — your turn' : ''}`;
-  const meHint = $('me-hint');
   const myActive = getActiveSource(me, state);
-  meHint.textContent = buildActionHint(state, myPlayerId, myActive);
+  // The full per-play guidance lives in the play-hint banner above the action bar (its own
+  // dedicated row, so reaction bubbles can never land on top of the text). The me-hint span
+  // stays in the header for short status text only.
+  const playHint = $('play-hint');
+  if (playHint) playHint.textContent = buildActionHint(state, myPlayerId, myActive);
+  const meHint = $('me-hint');
+  if (state.phase === 'swap')                       meHint.textContent = 'Click a hand card and a face-up card to swap them.';
+  else if (state.phase === 'over')                  meHint.textContent = '';
+  else if (state.current !== myPlayerId)            meHint.textContent = 'Watching…';
+  else                                              meHint.textContent = '';
 
   // ---- Face-down row ----
   const fdEl = $('me-faceDown');
