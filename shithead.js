@@ -1484,17 +1484,37 @@ function renderDirection() {
   if (label) label.textContent = reverse ? 'reversed' : 'clockwise';
 }
 
+// Track which log entries are already in the DOM so we only animate truly new ones.
+// Wiping and re-rendering on every renderTable() was causing every entry to re-animate
+// (the user reported this as "flashing" log entries).
+let _lastRenderedLogTs = 0;
+
 function renderActionLog() {
   const el = $('action-log');
   if (!el) return;
-  el.innerHTML = '';
-  // Show newest first, cap at last 8
-  actionLog.slice(-8).reverse().forEach((entry, i) => {
+  // Append only entries that arrived since the last render.
+  const fresh = actionLog.filter(e => e.ts > _lastRenderedLogTs);
+  fresh.forEach(entry => {
     const div = document.createElement('div');
-    div.className = 'log-entry' + (i > 4 ? ' fading' : '');
+    div.className = 'log-entry';
+    div.dataset.ts = String(entry.ts);
     div.innerHTML = `<span class="who">${escapeHtml(entry.name)}:</span> <span class="what">${entry.html}</span>`;
-    el.appendChild(div);
+    // Newest visually on top.
+    el.insertBefore(div, el.firstChild);
   });
+  if (fresh.length) _lastRenderedLogTs = fresh[fresh.length - 1].ts;
+  // Cap to the last 8 entries — drop oldest off the bottom.
+  while (el.children.length > 8) el.removeChild(el.lastChild);
+  // Fade out the older half so the eye is drawn to recent moves.
+  Array.from(el.children).forEach((child, i) => {
+    child.classList.toggle('fading', i > 4);
+  });
+}
+function resetActionLog() {
+  actionLog = [];
+  _lastRenderedLogTs = 0;
+  const el = $('action-log');
+  if (el) el.innerHTML = '';
 }
 
 function appendActionLog(entry) {
@@ -1670,8 +1690,11 @@ function postMoveProcessing() {
   // Visual: flash a burn over the discard if the last move triggered one.
   const tags = (state && state.lastEventTags) || [];
   if (tags.includes('burn') || tags.includes('fourOfKind')) flashBurnOnDiscard();
-  // Mark the freshly-played top card so it animates in.
-  const topCard = document.querySelector('#discard .card');
+  // Mark the freshly-played top card so it animates in. For a chain fan the topmost card
+  // is the LAST .card in DOM order (it has the highest z-index); for a single play it's
+  // the only card.
+  const allDiscardCards = document.querySelectorAll('#discard .card');
+  const topCard = allDiscardCards[allDiscardCards.length - 1];
   if (topCard) {
     topCard.classList.add('fresh');
     setTimeout(() => topCard.classList.remove('fresh'), 320);
@@ -2036,8 +2059,7 @@ function backToLobby() {
   // floating reaction bubbles, thinking dots, burn flashes, modals/passover screens, and
   // the right-rail action log feed.
   document.querySelectorAll('.passover, .modal-overlay, .reaction, .thinking, .burn-flash, .disconnect-banner').forEach(el => el.remove());
-  const log = $('action-log');
-  if (log) log.innerHTML = '';
+  resetActionLog();
   $('table').classList.remove('active');
   $('lobby').classList.add('active');
   $('mode-config').classList.add('hidden');

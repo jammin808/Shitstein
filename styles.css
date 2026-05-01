@@ -1060,7 +1060,8 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
    +-----------+-----------+-----------+
 */
 @media (min-width: 1100px) {
-  #table {
+  /* Scoped to .active so the grid layout doesn't override .screen { display: none }. */
+  #table.active {
     display: grid;
     grid-template-columns: 1fr 2fr 1fr;
     grid-template-areas:
