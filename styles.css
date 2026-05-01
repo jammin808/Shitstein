@@ -10,10 +10,10 @@
   --muted:       #888;
   --shadow:      0 4px 12px rgba(0,0,0,0.18);
   --shadow-lg:   0 12px 32px rgba(0,0,0,0.35);
-  --card-w:      88px;
-  --card-h:      124px;
-  --pile-card-w: 148px;
-  --pile-card-h: 208px;
+  --card-w:      96px;
+  --card-h:      134px;
+  --pile-card-w: 160px;
+  --pile-card-h: 224px;
 }
 
 * { box-sizing: border-box; }
@@ -922,21 +922,21 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (min-width: 1100px) {
   #table {
     display: grid;
-    grid-template-columns: 220px minmax(0, 1fr) 240px;
+    grid-template-columns: 1fr 2fr 1fr;
     grid-template-areas:
       "opps middle    log"
       "opps me-area   log"
       "opps actionBar playHint";
-    column-gap: 14px;
-    row-gap: 2px;
-    padding: 8px 14px;
+    column-gap: 16px;
+    row-gap: 0;
+    padding: 8px 16px;
     align-items: start;
     max-width: 1500px;
     margin: 0 auto;
     width: 100%;
   }
 
-  /* LEFT column — narrower vertical opponent rail */
+  /* LEFT column — opponents stacked, sticky-scroll, content-hugging width */
   .opponents {
     grid-area: opps;
     flex-direction: column;
@@ -953,16 +953,16 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .opponent {
     min-width: 0;
     width: 100%;
-    padding: 8px 10px;
+    padding: 10px 12px;
   }
   .opponent-name   { font-size: 14px; }
-  .opponent-counts { font-size: 11px; }
-  .opponent-stacks { min-height: 44px; }
-  .opponent-stacks .card.small { --card-w: 30px; --card-h: 42px; }
-  .opponent-hand .card.tiny    { --card-w: 18px; --card-h: 26px; }
+  .opponent-counts { font-size: 12px; }
+  .opponent-stacks { min-height: 50px; }
+  .opponent-stacks .card.small { --card-w: 36px; --card-h: 50px; }
+  .opponent-hand .card.tiny    { --card-w: 20px; --card-h: 28px; }
 
-  /* CENTRE column — bigger cards, distinctive table-panel for the play area, almost zero
-     vertical gap between the play area and the player's hand below. */
+  /* CENTRE column — bigger cards, distinctive sunken-felt panel for the play area, near-zero
+     vertical gap between the play panel and the me-area below it (they touch). */
   .middle {
     grid-area: middle;
     margin: 0;
@@ -973,58 +973,74 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
       radial-gradient(ellipse at 50% 35%, rgba(0,0,0,0.10), rgba(0,0,0,0.42) 90%),
       linear-gradient(135deg, rgba(31, 93, 58, 0.55), rgba(15, 58, 35, 0.65));
     border: 1px solid rgba(212, 134, 42, 0.35);
-    border-radius: 16px;
+    border-radius: 16px 16px 0 0;
+    border-bottom: none;
     box-shadow:
       inset 0 4px 16px rgba(0,0,0,0.40),
       inset 0 -1px 0 rgba(255,255,255,0.04),
       0 2px 14px rgba(0,0,0,0.20);
-    padding: 14px 18px 22px;
+    padding: 12px 18px 14px;
     gap: 36px;
   }
   .me-area     {
     grid-area: me-area;
     margin-top: 0;
     max-width: none;
-    padding: 4px 12px 6px;
+    padding: 6px 14px 8px;
+    border-radius: 0 0 14px 14px;
   }
   .me-header { margin-bottom: 2px; }
-  .reserve { padding: 4px 10px; margin-bottom: 4px; border-radius: 8px; }
+  .reserve { padding: 2px 10px 4px; margin-bottom: 4px; border-radius: 8px; }
   .reserve-label { margin-bottom: 2px; }
-  .hand-section { padding: 4px 12px; border-radius: 8px; }
+  .hand-section { padding: 2px 12px 4px; border-radius: 8px; }
   .hand-label { margin-bottom: 2px; }
   #action-bar  {
     grid-area: actionBar;
-    margin: 0;
+    margin: 6px 0 0;
     max-width: none;
     width: 100%;
     padding: 8px 14px;
     gap: 10px;
   }
   .action-buttons { gap: 8px; }
-  .action-btn { padding: 9px 18px; min-width: 130px; font-size: 16px; }
+  .action-btn { padding: 9px 20px; min-width: 130px; font-size: 16px; }
 
-  /* RIGHT column — action log spans the top two rows; play-hint sits in row 3 underneath */
+  /* RIGHT column — action log spans rows 1+2, play-hint is in row 3 directly below it.
+     row-gap is 0 and visual styling merges them so they read as a single panel: the log
+     gets a top-rounded background, the play-hint gets matching styling with a top border
+     to separate the two while staying flush. */
   .action-log {
     grid-area: log;
-    position: relative;
-    top: auto;
-    right: auto;
-    width: auto;
-    max-height: 100%;
+    position: sticky;
+    top: 76px;
+    max-height: calc(100vh - 90px);
     margin: 0;
-    align-self: stretch;
+    width: auto;
+    right: auto;
+    background: rgba(0,0,0,0.40);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 2px 14px rgba(0,0,0,0.25);
+    overflow-y: auto;
+    padding: 10px 10px 6px;
   }
   .play-hint {
     grid-area: playHint;
     margin: 0;
     max-width: none;
     width: 100%;
-    padding: 12px 16px;
-    font-size: 15px;
-    line-height: 1.45;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.4;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-top: 1px solid rgba(212, 134, 42, 0.40);
+    border-radius: 0 0 12px 12px;
+    background: rgba(0,0,0,0.50);
+    box-shadow: 0 2px 14px rgba(0,0,0,0.25);
   }
 
-  /* Smaller-card hand cards mean smaller emoji row works too */
+  /* Compact emoji buttons sit comfortably in the action-bar row at this column width */
   .emoji-btn { width: 32px; height: 32px; font-size: 16px; }
   /* Right-rail action log carries the recap; the inline event-log would duplicate it */
   .event-log { display: none; }

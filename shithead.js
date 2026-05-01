@@ -1231,9 +1231,10 @@ function renderTable() {
         const card = renderCard(c, { help: false });
         card.classList.add('fan-card');
         // Each card slides into view in sequence, like cards being laid down. Last card
-        // ends in the slot position; earlier cards trail to the LEFT with a 50% overlap.
+        // ends in the slot position; earlier cards trail to the LEFT with a 40% overlap so
+        // a long chain doesn't overflow the play panel.
         const offsetSteps = (chain.length - 1 - i);
-        card.style.left = `calc(var(--card-w) * -0.5 * ${offsetSteps})`;
+        card.style.left = `calc(var(--card-w) * -0.4 * ${offsetSteps})`;
         card.style.zIndex = String(i + 1);
         card.style.animationDelay = `${i * 70}ms`;
         fan.appendChild(card);
