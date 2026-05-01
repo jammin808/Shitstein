@@ -2095,14 +2095,25 @@ function startLocalGame(names, humansArr, primaryHumanId) {
 
 // =================== ONLINE MULTIPLAYER (PeerJS) ===================
 
-// PeerJS connection options. Google's public STUN helps establish WebRTC across NATs/firewalls
-// where the broker default alone fails (corporate networks, mobile carriers, etc.).
+// PeerJS connection options. We provide BOTH STUN and TURN because peers behind symmetric
+// NAT or strict firewalls need a TURN relay to actually exchange media — STUN alone fails
+// silently for those users. The TURN credentials are the public ones PeerJS itself ships
+// with. debug: 2 prints warnings + errors so failures show up in the console.
 const PEER_CONFIG = {
+  debug: 2,
   config: {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:global.stun.twilio.com:3478' },
+      {
+        urls: [
+          'turn:eu-0.turn.peerjs.com:3478',
+          'turn:us-0.turn.peerjs.com:3478',
+        ],
+        username: 'peerjs',
+        credential: 'peerjsp',
+      },
     ],
   },
 };
@@ -2151,11 +2162,32 @@ function buildHostConfig(cfg) {
 }
 
 function startHosting(myName) {
-  $('cfg-host').disabled = true;
-  $('cfg-host').textContent = 'Connecting…';
+  const hostBtn = $('cfg-host');
+  hostBtn.disabled = true;
+  hostBtn.textContent = 'Connecting…';
+
+  // Sanity timeout: if the broker doesn't assign us an ID within 15 s, give the user a way
+  // to retry instead of silently leaving the button grey forever.
+  const openTimeout = setTimeout(() => {
+    if (hostBtn.disabled && hostBtn.textContent === 'Connecting…') {
+      console.warn('[host] broker did not assign an ID within 15s');
+      hostBtn.disabled = false;
+      hostBtn.textContent = 'Retry';
+      alert("Couldn't reach the PeerJS broker. Check your connection (or try a different browser / ad-blocker) and click Retry.");
+    }
+  }, 15000);
 
   const peer = new Peer(undefined, PEER_CONFIG);
   peer.on('open', (id) => {
+    clearTimeout(openTimeout);
+    console.log('[host] room open — peer id', id);
+    // Hide the Create Room form (button + name input) so the user sees a clean lobby.
+    hostBtn.style.display = 'none';
+    const nameInput = $('cfg-name');
+    if (nameInput) {
+      const nameRow = nameInput.closest('.row');
+      if (nameRow) nameRow.style.display = 'none';
+    }
     showHostLobby(peer, id, myName);
   });
   peer.on('disconnected', () => {
@@ -2163,13 +2195,17 @@ function startHosting(myName) {
     try { peer.reconnect(); } catch (_) {}
   });
   peer.on('error', (err) => {
-    const msg = (err && (err.type === 'network' || err.type === 'server-error'))
-      ? `Couldn't reach the matchmaking broker. Check your connection and try again.\n(${err.type})`
-      : 'Network error: ' + (err.message || err.type || err);
+    clearTimeout(openTimeout);
+    const msg = (err && (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error'))
+      ? `Couldn't reach the matchmaking broker. This is usually a network/firewall block — try another network or browser.\n(${err.type})`
+      : (err && err.type === 'unavailable-id')
+        ? 'That room ID is already taken — try again.'
+        : 'Network error: ' + (err.message || err.type || err);
     alert(msg);
     console.error('[host] peer error', err);
-    $('cfg-host').disabled = false;
-    $('cfg-host').textContent = 'Create Room';
+    hostBtn.style.display = '';
+    hostBtn.disabled = false;
+    hostBtn.textContent = 'Create Room';
   });
 }
 
