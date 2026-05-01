@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shithead — The Card Game</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <h1 class="brand">
+      <svg class="brand-mark" viewBox="0 0 64 48" aria-hidden="true">
+        <g transform="translate(8 6)">
+          <rect x="0"  y="6"  width="20" height="32" rx="3" ry="3" fill="#fdfaf2" transform="rotate(-14 10 22)"/>
+          <rect x="14" y="3"  width="20" height="32" rx="3" ry="3" fill="#fdfaf2" transform="rotate(-2 24 19)"/>
+          <rect x="28" y="6"  width="20" height="32" rx="3" ry="3" fill="#fdfaf2" transform="rotate(10 38 22)"/>
+          <text x="6"  y="30" fill="#1d1d1d" font-family="Georgia, serif" font-weight="700" font-size="14" transform="rotate(-14 10 22)">♠</text>
+          <text x="20" y="27" fill="#c5343a" font-family="Georgia, serif" font-weight="700" font-size="14" transform="rotate(-2 24 19)">♥</text>
+          <text x="34" y="30" fill="#1d1d1d" font-family="Georgia, serif" font-weight="700" font-size="14" transform="rotate(10 38 22)">♣</text>
+        </g>
+      </svg>
+      <span class="brand-word">Shithead</span>
+    </h1>
+    <div class="topbar-actions">
+      <label class="toggle" title="Auto-play bots, or pause between each move">
+        <input type="checkbox" id="auto-play-toggle" checked>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">Auto-play</span>
+      </label>
+      <button id="btn-rules" class="ghost" title="Open the rules sidebar">📖 Rules</button>
+      <button id="btn-new" class="ghost" title="Start over">↻ New Game</button>
+    </div>
+  </header>
+
+  <!-- ============ LOBBY ============ -->
+  <main id="lobby" class="screen">
+    <div class="lobby-card">
+      <h2>Welcome, contestant.</h2>
+      <p class="muted">Last one holding cards must make the tea. Choose your fate:</p>
+
+      <div class="mode-grid">
+        <button class="mode-btn" data-mode="ai">
+          <div class="mode-icon">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+              <rect x="10" y="14" width="28" height="22" rx="4" ry="4" fill="none" stroke="currentColor" stroke-width="2.4"/>
+              <line x1="24" y1="6"  x2="24" y2="14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              <circle cx="24" cy="5" r="2.4" fill="currentColor"/>
+              <circle cx="18" cy="24" r="2.6" fill="currentColor"/>
+              <circle cx="30" cy="24" r="2.6" fill="currentColor"/>
+              <line x1="18" y1="31" x2="30" y2="31" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              <line x1="6"  y1="22" x2="10" y2="22" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              <line x1="38" y1="22" x2="42" y2="22" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="mode-title">vs Bots</div>
+          <div class="mode-desc">2–5 players. Simulated opponents.</div>
+        </button>
+        <button class="mode-btn" data-mode="local">
+          <div class="mode-icon">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+              <circle cx="16" cy="14" r="5" fill="none" stroke="currentColor" stroke-width="2.4"/>
+              <path d="M6 36 C6 28, 10 24, 16 24 C22 24, 26 28, 26 36" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              <circle cx="34" cy="14" r="5" fill="none" stroke="currentColor" stroke-width="2.4"/>
+              <path d="M24 36 C24 28, 28 24, 34 24 C40 24, 44 28, 44 36" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              <line x1="22" y1="40" x2="28" y2="40" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              <polyline points="24,38 26,40 24,42" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="mode-title">Pass &amp; Play</div>
+          <div class="mode-desc">2–5 humans on one device. Pass between turns.</div>
+        </button>
+        <button class="mode-btn" data-mode="online-host">
+          <div class="mode-icon">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+              <circle cx="24" cy="24" r="14" fill="none" stroke="currentColor" stroke-width="2.4"/>
+              <ellipse cx="24" cy="24" rx="6" ry="14" fill="none" stroke="currentColor" stroke-width="2"/>
+              <line x1="10" y1="24" x2="38" y2="24" stroke="currentColor" stroke-width="2"/>
+              <path d="M24 10 C20 14, 20 34, 24 38" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M24 10 C28 14, 28 34, 24 38" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M18 8 L24 4 L30 8 L28 12 L24 9 L20 12 Z" fill="currentColor"/>
+            </svg>
+          </div>
+          <div class="mode-title">Host Online</div>
+          <div class="mode-desc">Up to 5 players over peer-to-peer WebRTC.</div>
+        </button>
+        <button class="mode-btn" data-mode="online-join">
+          <div class="mode-icon">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+              <rect x="20" y="8" width="20" height="32" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2.4"/>
+              <circle cx="35" cy="24" r="1.8" fill="currentColor"/>
+              <line x1="6"  y1="24" x2="22" y2="24" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+              <polyline points="14,16 22,24 14,32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="mode-title">Join Online</div>
+          <div class="mode-desc">Got a room code? Step inside.</div>
+        </button>
+      </div>
+
+      <div id="mode-config" class="mode-config hidden"></div>
+
+      <p class="footnote">All gameplay runs in your browser. Online play uses WebRTC; only a public signaling broker is touched to introduce peers.</p>
+    </div>
+  </main>
+
+  <!-- ============ GAME TABLE ============ -->
+  <main id="table" class="screen">
+    <div id="opponents" class="opponents"></div>
+
+    <div class="middle">
+      <div id="deck"     class="deck"></div>
+      <div id="direction-arrow" class="direction-arrow" title="Direction of play">
+        <span class="direction-glyph" id="direction-glyph">↻</span>
+        <div class="direction-label" id="direction-label">clockwise</div>
+      </div>
+      <div id="discard"  class="discard"></div>
+      <div id="turn-indicator" class="turn-indicator"></div>
+    </div>
+
+    <div id="action-bar" class="action-bar">
+      <button id="btn-play"   class="action-btn primary"  >Play Selected</button>
+      <button id="btn-pickup" class="action-btn warning"  >Pick Up Pile</button>
+      <button id="btn-take"   class="action-btn warning"  style="display:none;">Take from Deck</button>
+      <button id="btn-skip"   class="action-btn warning"  style="display:none;">Skip Turn</button>
+      <button id="btn-step"   class="action-btn step"     style="display:none;">▶ Continue</button>
+      <span id="event-log" class="event-log"></span>
+    </div>
+
+    <div class="me-area">
+      <div class="me-header">
+        <div class="me-label" id="me-label">You</div>
+        <div class="me-hint"  id="me-hint"></div>
+      </div>
+      <div class="me-stacks">
+        <div class="stack-row stacks-blind" id="me-faceDown"></div>
+        <div class="stack-row stacks-up"    id="me-faceUp"></div>
+      </div>
+      <div class="hand" id="me-hand"></div>
+      <div class="emoji-picker" id="emoji-picker">
+        <span class="emoji-picker-label">React:</span>
+        <button class="emoji-btn" data-emoji="👏" data-text="Nice one." title="Nice one.">👏</button>
+        <button class="emoji-btn" data-emoji="🔥" data-text="Absolute weapon!" title="Weapon!">🔥</button>
+        <button class="emoji-btn" data-emoji="🤣" data-text="Absolute melt." title="Melt.">🤣</button>
+        <button class="emoji-btn" data-emoji="😬" data-text="Ouch, mate." title="Painful.">😬</button>
+        <button class="emoji-btn" data-emoji="💀" data-text="RIP." title="RIP">💀</button>
+        <button class="emoji-btn" data-emoji="🙄" data-text="Was that it?" title="Was that it?">🙄</button>
+        <button class="emoji-btn" data-emoji="🥲" data-text="Bless ya." title="Bless ya">🥲</button>
+        <button class="emoji-btn" data-emoji="👑" data-text="Royalty." title="Royal">👑</button>
+        <button class="emoji-btn" data-emoji="🤡" data-text="Clown energy." title="Clown">🤡</button>
+        <button class="emoji-btn" data-emoji="🍵" data-text="Brew incoming." title="Tea time">🍵</button>
+      </div>
+    </div>
+
+    <aside id="action-log" class="action-log" aria-label="Recent moves"></aside>
+  </main>
+
+  <!-- ============ RULES SIDEBAR ============ -->
+  <aside id="rules-sidebar" class="sidebar">
+    <button class="close" id="rules-close" aria-label="Close">✕</button>
+    <h2>How to Play</h2>
+
+    <section>
+      <h3>Goal</h3>
+      <p>Get rid of all your cards. The <strong>last player still holding cards</strong> is the Shithead — and must make tea.</p>
+    </section>
+
+    <section>
+      <h3>Setup</h3>
+      <ul>
+        <li>Each player gets <strong>3 face-down</strong> cards (cannot be looked at).</li>
+        <li>On top of those, <strong>3 face-up</strong> cards everyone can see.</li>
+        <li>Plus <strong>3 hand</strong> cards that only you can see.</li>
+        <li>Before play, you may swap any hand card with a face-up card to set yourself up.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h3>Play</h3>
+      <ul>
+        <li>Whoever holds the lowest non-special card starts.</li>
+        <li><strong>Single-card play:</strong> a normal card plays if it's (a) a higher rank in the same suit (any gap is fine — e.g., 9♠ on 3♠), or (b) the same rank in any suit. Specials have their own rules.</li>
+        <li><strong>Multi-card plays use chain rules.</strong> Each new card must chain to the previous one by either equal rank in any suit, OR <strong>strictly consecutive in the same suit</strong> (next rank up or down — no jumps). Same-rank pairs, runs (up or down), and King chains can all be mixed: <em>K♠ → 7♠ → 7♥</em>, or a run <em>3♥ → 4♥ → 5♥</em>, or <em>5♠ + 5♥ + 6♥ + 7♥</em>. Click the cards in chain order. Note: 5♠ → 3♠ is <em>not</em> allowed in a chain because the run isn't consecutive — chains require ±1.</li>
+        <li><strong>Jacks have their own rule:</strong> a Jack only plays on another Jack or on a lower rank in the same suit.</li>
+        <li>While the deck has cards, refill your hand back to 3 after each play. <strong>Hand and face-up are locked away until the deck is empty.</strong> Only when your <em>hand</em> is empty AND the <em>deck</em> is empty can you play face-up cards. Then face-down (blindly), one at a time.</li>
+        <li>If you can't play (and won't), <strong>pick up the pile</strong>. If a blind face-down can't play, pick up the pile + the flipped card.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h3>Magic Cards</h3>
+      <ul>
+        <li><strong>2</strong> — <strong>Pickup +2.</strong> A 2 only plays on another 2, on a black Jack, or in suit. The next player must take 2 cards from the deck — unless they counter (see chain). Stacking another 2 passes the additive total down the chain.</li>
+        <li><strong>8</strong> — <strong>Skip stack.</strong> An 8 only plays on another 8 or on a lower rank in the same suit. <strong>Each 8 stacks one skip in the queue</strong> — two 8s = the next two players miss their go; three 8s = three miss. While the queue is alive, only another 8 plays. <em>Once the queue drains, the 8 sitting on top is just a normal card</em> and the following player plays per the usual rules (e.g., a higher-same-suit card). With wraparound, the player who played the 8s can get another go after everyone else is skipped.</li>
+        <li><strong>9</strong> — <strong>Lower-or-equal lock.</strong> A 9 can only be played on another 9 or in suit, and <em>cannot</em> be played on a 2 or an 8. When a 9 is on top, the next player must play <strong>equal or lower than 9</strong> (any card 2–9 of any suit — suit/rank rule overridden) or a 10 (wild, burns). J / Q / K / A are blocked on a 9.</li>
+        <li><strong>10</strong> — <strong>Burn (wild).</strong> A 10 of any suit can go on <em>anything</em> — even a pickup chain — to clear the pack. (Still rejected while skips from an 8 are queued.) In a chain, however, a 10 must be in numerical sequence like any other card.</li>
+        <li><strong>J</strong> — <strong>Jack.</strong> A Jack only plays on another Jack or on a lower rank in the same suit. Black Jacks (♠ ♣) add +5 to a pickup chain; red Jacks (♥ ♦) cancel the most recent black Jack.</li>
+        <li><strong>Q</strong> — <strong>Reverse &amp; lock.</strong> A Queen can only be played on another Queen or in suit. Flips direction of play (two players: you go again). Once on top, it can only be followed by another Queen, a higher rank in the Q's suit (K or A), a 2, a 10, or an Ace.</li>
+        <li><strong>K</strong> — <strong>Royal demand.</strong> A King can only be played on another King or in suit. <em>Exception:</em> a K cannot follow a freshly-placed 2 / 8 / J — the previous player must have had a turn to react first. When a K is on top (or you're chaining off one), the legal followers are: another King (paired), any Ace, or a card of the same suit. Solo King? +1 card from the deck.</li>
+        <li><strong>A</strong> — <strong>Wild.</strong> An Ace of any suit plays at any time except after a 2, black Jack, or 8. The player names the suit the next player must follow — pick the suit that benefits you most.</li>
+        <li><strong>Four of a kind</strong> on the discard — burns the pile. Same player plays again.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h3>The Pickup Chain</h3>
+      <p>Once a 2 (or a black Jack) is played, a chain begins. The next player must either <strong>counter</strong> or <strong>take the cards from the deck</strong>:</p>
+      <ul>
+        <li><strong>2</strong> — adds <strong>+2</strong> to the running total.</li>
+        <li><strong>Black Jack</strong> (♠ or ♣) — adds <strong>+5</strong>.</li>
+        <li><strong>Red Jack</strong> (♥ or ♦) — cancels the most recent black Jack and its 5 cards. Other 2s and black Jacks in the chain still apply.</li>
+        <li>If you can't or won't counter, click <em>Take from Deck</em> — you pick up the running total from the deck, the chain ends.</li>
+        <li><strong>Run-out rule:</strong> if a player's multi-card play mixes chain cards (2 / Jacks) with a run and <em>ends on a non-chain card</em> (e.g., <em>2♥ → 3♥ → 4♥</em>), the pickup chain is cancelled. The next player just plays on the last card normally.</li>
+      </ul>
+    </section>
+
+    <section class="muted">
+      <p>The <strong>?</strong> on each card explains what it does. Tradition uses base rules from <em>pagat.com</em>; common variants (7 = lower-than, 8 = invisible, 3 = mirror) are not in play here.</p>
+    </section>
+  </aside>
+
+  <!-- ============ MODAL ROOT + TOOLTIP ============ -->
+  <div id="modal-root"></div>
+  <div id="tooltip" class="tooltip"></div>
+
+  <!-- PeerJS for online (optional, fully client-side WebRTC) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="shithead.js"></script>
+</body>
+</html>
