@@ -29,7 +29,7 @@ const CARD_INFO = {
   '10': '<strong>10 — Burn!</strong><br>A 10 of any suit can be played on <em>anything</em> to clear the pack — including breaking out of a pickup chain. (Still rejected while skips from an 8 are queued.) <em>In a chain, however, a 10 must be in numerical sequence</em> like any other card — a 10 isn\'t wild as a chain link.',
   'J':  '<strong>Jack.</strong><br>A Jack can only be played on another Jack, or on a lower rank in the same suit. <strong>Black Jacks</strong> (♠ ♣) add <strong>+5</strong> to a pickup chain. <strong>Red Jacks</strong> (♥ ♦) cancel the most recent black Jack and its 5 cards.',
   'Q':  '<strong>Q — Reverse &amp; lock.</strong><br>A Queen can <em>only</em> be played on another Queen or in suit. Flips the direction of play (with two players, the same player goes again). Once a Q is on top, it can only be followed by another Queen, a higher rank in the Q\'s suit, a 2, a 10, or an Ace.',
-  'K':  '<strong>K — Royal demand.</strong><br>A King can only be played on another King or in suit. <em>Exception:</em> a K cannot follow a freshly-placed 2, 8, or Jack — the previous player must have had a turn to react first (e.g., taken the chain or been skipped). When a K is on top (or you\'re chaining off one), the legal followers are: another King (paired), a card of the same suit, or an Ace. Played solo? Pick up one extra card from the deck as penalty.',
+  'K':  '<strong>K — Royal demand.</strong><br>A King can only be played on another King or in suit. <em>Exception:</em> a K cannot follow a freshly-placed 2, 8, or Jack — the previous player must have had a turn to react first (e.g., taken the chain or been skipped). <strong>When chaining off a K in your own play</strong>, the legal followers are: another K (pair), <em>any card of the K\'s suit</em>, a 10 of any suit (burns the pile), or the same-suit Ace (high-Ace ±1). Played solo? Pick up one extra card from the deck as penalty.',
   'A':  '<strong>A — Wild lead, suit-pivot in chains.</strong><br>An Ace of any suit can lead at any time, except after a 2, a black Jack, or an 8. <em>You name the called suit as soon as you click the Ace</em> — the next player must follow that suit. In a chain, the Ace also acts as a suit-pivot: the called suit becomes the chain\'s direction, and the Ace can be high (14) or low (1), so the legal next chain link is another Ace (pair), the <strong>K of the called suit</strong> (high), or the <strong>2 of the called suit</strong> (low). E.g. A♥ called as ♠ → K♠ or 2♠ chains.',
 };
 
@@ -137,9 +137,12 @@ function topDiscard(state) {
 // (with a clean state — no pickup chain, no skip pending, no ace named-suit override)?
 // Used for face-up "domino" chains where each card plays on the previous one.
 function canPlayOnCard(card, prevCard) {
+  // K-chain exception (must run BEFORE the strict 10-rule): a 10 of any suit follows a King
+  // in a chain. The same-suit any-rank K-extension below covers other ranks.
+  if (prevCard.rank === 'K' && card.rank === '10') return true;
   // 10-card chain rule (highest priority): a 10 in a chain must follow numerical sequence —
   // either same rank or strictly consecutive same-suit (±1). 10 is wild only as a single-card
-  // lead, NOT as a chain link. Even after a Q, K, or 9, the 10 needs ±1 same-suit / pair.
+  // lead, NOT as a chain link. Even after a Q or 9, the 10 needs ±1 same-suit / pair.
   if (card.rank === '10') return chainStep(card, prevCard);
   // Ace chain rule (same logic as 10): an Ace in a chain must follow numerical sequence.
   // Likewise anything FOLLOWING an Ace must be in sequence — so the Ace doesn't chain off
@@ -857,27 +860,30 @@ function botMove(state) {
   // Priority: don't waste high-value specials. Use cheap same-suit cards first; save 10s and Aces.
   const findKingChain = (kIdx) => {
     const kSuit = pool[kIdx].suit;
-    // Legal K-chain partners: same-suit cards (K-extension) or another K (handled separately).
-    // 10s and Aces are NOT wild chain links — they need numerical sequence. Same-suit Ace
-    // satisfies ±1, but off-suit Aces and same-suit 10s no longer chain on a K.
+    // Legal K-chain partners: any same-suit card (K-extension), a 10 of any suit (K-rule),
+    // or a same-suit Ace via the high-Ace neighbour (±1). Off-suit Aces don't chain on K.
     const cands = pool
       .map((c, i) => ({ c, i }))
-      .filter(({ c, i }) => i !== kIdx && c.rank !== 'K' && c.suit === kSuit && c.rank !== '10');
+      .filter(({ c, i }) => i !== kIdx && c.rank !== 'K' && (
+        c.rank === '10' || c.suit === kSuit
+      ));
     if (cands.length === 0) return null;
 
     // 1. Same-suit non-special low rank — cheapest dump.
     const sameSuitLow = cands
-      .filter(({ c }) => !isSpecial(c.rank))
+      .filter(({ c }) => c.suit === kSuit && !isSpecial(c.rank))
       .sort((a, b) => RANK_VAL[a.c.rank] - RANK_VAL[b.c.rank])[0];
     // 2. Same-suit cheap specials (2 / Q / 8).
-    const sameSuit2 = cands.find(({ c }) => c.rank === '2');
-    const sameSuitQ = cands.find(({ c }) => c.rank === 'Q');
-    const sameSuit8 = cands.find(({ c }) => c.rank === '8');
-    // 3. Same-suit Ace — last resort; saves the wild for a freer moment.
-    const sameSuitA = cands.find(({ c }) => c.rank === 'A');
-    const fallback = cands[0];
+    const sameSuit2 = cands.find(({ c }) => c.suit === kSuit && c.rank === '2');
+    const sameSuitQ = cands.find(({ c }) => c.suit === kSuit && c.rank === 'Q');
+    const sameSuit8 = cands.find(({ c }) => c.suit === kSuit && c.rank === '8');
+    // 3. A 10 of any suit — productive: K + 10 burns the pile and the bot plays again.
+    const any10     = cands.find(({ c }) => c.rank === '10');
+    // 4. Same-suit Ace — last resort; saves the wild for a freer moment.
+    const sameSuitA = cands.find(({ c }) => c.suit === kSuit && c.rank === 'A');
+    const fallback  = cands[0];
 
-    return (sameSuitLow || sameSuit2 || sameSuitQ || sameSuit8 || sameSuitA || fallback).i;
+    return (sameSuitLow || sameSuit2 || sameSuitQ || sameSuit8 || any10 || sameSuitA || fallback).i;
   };
 
   // Helper: build a play stack for a chosen rank (lead first; same-rank stack; K chain bonus).
