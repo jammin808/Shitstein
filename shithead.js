@@ -117,7 +117,9 @@ const Sound = (() => {
   let muted        = (typeof localStorage !== 'undefined' && localStorage.getItem('shitstein-muted') === '1');
   let musicEnabled = (typeof localStorage === 'undefined' || localStorage.getItem('shitstein-music') !== '0');
 
-  let musicFilter = null; // shared low-pass on the music bus, swept by intensity
+  let musicFilter = null;   // LPF on the tonal voices only — sweeps with intensity
+  let tonalGain   = null;   // melody / harmony / bass route here (filter applies)
+  let drumBus     = null;   // kick / snare / hat route here (filter bypassed)
   function init() {
     if (ctx) return ctx;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -129,17 +131,28 @@ const Sound = (() => {
     sfxGain = ctx.createGain();
     sfxGain.gain.value = 0.45;
     sfxGain.connect(master);
-    // Music chain: musicGain → musicFilter (LPF) → master. The filter cutoff is animated
-    // by computeIntensity at every section boundary so the music opens up in tense moments
-    // and feels muffled / distant during calm play. This is the main psychological dial.
+    // Music graph (so the filter sweep doesn't murder the drums):
+    //   tonalGain  → musicFilter (LPF, swept) ↘
+    //                                          musicGain (master volume) → master
+    //   drumBus    → ────────────────────────↗
+    // Tonal voices feel the intensity-driven cutoff; drums always come through clear.
     musicGain = ctx.createGain();
-    musicGain.gain.value = 0.10;
+    musicGain.gain.value = 0.12;
+    musicGain.connect(master);
+
     musicFilter = ctx.createBiquadFilter();
     musicFilter.type = 'lowpass';
     musicFilter.frequency.value = 1800;
     musicFilter.Q.value = 0.5;
-    musicGain.connect(musicFilter);
-    musicFilter.connect(master);
+    musicFilter.connect(musicGain);
+
+    tonalGain = ctx.createGain();
+    tonalGain.gain.value = 1.0;
+    tonalGain.connect(musicFilter);
+
+    drumBus = ctx.createGain();
+    drumBus.gain.value = 1.6; // a bit hotter so drums sit forward
+    drumBus.connect(musicGain);
     return ctx;
   }
   function resume() {
@@ -308,7 +321,7 @@ const Sound = (() => {
     const tg = ctx.createGain();
     tg.gain.setValueAtTime(gain * 0.65, t);
     tg.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
-    tone.connect(tg); tg.connect(musicGain);
+    tone.connect(tg); tg.connect(drumBus);
     tone.start(t); tone.stop(t + 0.11);
     const src = ctx.createBufferSource();
     src.buffer = getNoise();
@@ -317,7 +330,7 @@ const Sound = (() => {
     const g = ctx.createGain();
     g.gain.setValueAtTime(gain * 0.30, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-    src.connect(filt); filt.connect(g); g.connect(musicGain);
+    src.connect(filt); filt.connect(g); g.connect(drumBus);
     src.start(t); src.stop(t + 0.07);
   }
   function drumSnare(when, gain) {
@@ -330,14 +343,14 @@ const Sound = (() => {
     const g = ctx.createGain();
     g.gain.setValueAtTime(gain * 0.55, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
-    src.connect(filt); filt.connect(g); g.connect(musicGain);
+    src.connect(filt); filt.connect(g); g.connect(drumBus);
     src.start(t); src.stop(t + 0.11);
     const tone = ctx.createOscillator();
     tone.type = 'triangle'; tone.frequency.setValueAtTime(220, t);
     const tg = ctx.createGain();
     tg.gain.setValueAtTime(gain * 0.25, t);
     tg.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-    tone.connect(tg); tg.connect(musicGain);
+    tone.connect(tg); tg.connect(drumBus);
     tone.start(t); tone.stop(t + 0.06);
   }
   function drumHat(when, gain) {
@@ -350,10 +363,11 @@ const Sound = (() => {
     const g = ctx.createGain();
     g.gain.setValueAtTime(gain * 0.35, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
-    src.connect(filt); filt.connect(g); g.connect(musicGain);
+    src.connect(filt); filt.connect(g); g.connect(drumBus);
     src.start(t); src.stop(t + 0.05);
   }
-  // Tonal voice (square / triangle) — used by melody, harmony, and bass.
+  // Tonal voice — used by melody (square), harmony (sawtooth), and bass (triangle).
+  // Routed through tonalGain so the music low-pass filter shapes only the tonal layers.
   function playNote(freq, dur, type, gain, when) {
     if (!ctx || !freq) return;
     const osc = ctx.createOscillator();
@@ -364,7 +378,7 @@ const Sound = (() => {
     g.gain.linearRampToValueAtTime(gain, when + 0.012);
     g.gain.linearRampToValueAtTime(gain * 0.55, when + dur * 0.55);
     g.gain.exponentialRampToValueAtTime(0.0001, when + dur - 0.005);
-    osc.connect(g); g.connect(musicGain);
+    osc.connect(g); g.connect(tonalGain);
     osc.start(when); osc.stop(when + dur);
   }
 
@@ -390,7 +404,7 @@ const Sound = (() => {
       kicks:  [0, 4, 8, 12],
       snares: [],
       hats:   [0, 2, 4, 6, 8, 10, 12, 14],
-      melodyGain: 0.085, bassGain: 0.16, harmonyGain: 0.04, drumGain: 0.55,
+      melodyGain: 0.085, bassGain: 0.16, harmonyGain: 0.07, drumGain: 0.65,
     },
     A2: { // Calm variant — same chord shape, ascending melodic answer
       melody: [
@@ -408,7 +422,7 @@ const Sound = (() => {
       kicks:  [0, 4, 8, 12],
       snares: [],
       hats:   [0, 2, 4, 6, 8, 10, 12, 14],
-      melodyGain: 0.085, bassGain: 0.16, harmonyGain: 0.04, drumGain: 0.55,
+      melodyGain: 0.085, bassGain: 0.16, harmonyGain: 0.07, drumGain: 0.65,
     },
     B: { // Verse — confident hook, walking bass, backbeat snare
       melody: [
@@ -430,7 +444,7 @@ const Sound = (() => {
       kicks:  [0, 4, 8, 12],
       snares: [2, 6, 10, 14],
       hats:   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.05, drumGain: 0.85,
+      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.075, drumGain: 0.90,
     },
     B2: { // Verse variant — descending hook with anticipation
       melody: [
@@ -454,7 +468,7 @@ const Sound = (() => {
       kicks:  [0, 4, 8, 12],
       snares: [2, 6, 10, 14],
       hats:   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.05, drumGain: 0.85,
+      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.075, drumGain: 0.90,
     },
     C: { // Intense — 8th-note arpeggios, full harmony, 4-on-the-floor + 16th hats
       melody: [
@@ -484,7 +498,7 @@ const Sound = (() => {
       kicks:  [0, 2, 4, 6, 8, 10, 12, 14],
       snares: [2, 6, 10, 14],
       hats:   Array.from({ length: 32 }, (_, i) => i * 0.5),
-      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.06, drumGain: 1.0,
+      melodyGain: 0.105, bassGain: 0.18, harmonyGain: 0.085, drumGain: 1.05,
     },
     C2: { // Intense variant — descending lead, syncopated harmony
       melody: [
@@ -516,7 +530,7 @@ const Sound = (() => {
       kicks:  [0, 2, 4, 6, 8, 10, 12, 14],
       snares: [2, 6, 10, 14],
       hats:   Array.from({ length: 32 }, (_, i) => i * 0.5),
-      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.06, drumGain: 1.0,
+      melodyGain: 0.105, bassGain: 0.18, harmonyGain: 0.085, drumGain: 1.05,
     },
     D: { // Climax / bridge — modulation to D minor, snare rolls, peak intensity
       melody: [
@@ -548,7 +562,7 @@ const Sound = (() => {
       kicks:  [0, 2, 4, 6, 8, 10, 12, 14],
       snares: [2, 4, 6, 7, 10, 12, 14, 15], // includes a roll fill at the end of bars 2 and 4
       hats:   Array.from({ length: 32 }, (_, i) => i * 0.5),
-      melodyGain: 0.11, bassGain: 0.20, harmonyGain: 0.07, drumGain: 1.0,
+      melodyGain: 0.115, bassGain: 0.20, harmonyGain: 0.095, drumGain: 1.10,
     },
   };
   // Track previous section so variant rotation can pick a different sibling next time.
@@ -615,12 +629,13 @@ const Sound = (() => {
       t += dur;
     });
     const sectionEnd = t;
-    // Harmony (optional second voice — only Section C)
+    // Harmony — sawtooth (different timbre from the square melody so the two voices
+    // are perceptually distinct, not just two squares blending into mush).
     if (sec.harmony) {
       t = startTime;
       sec.harmony.forEach(([f, b]) => {
         const dur = b * BEAT;
-        if (f) playNote(f, dur, 'square', sec.harmonyGain, t);
+        if (f) playNote(f, dur, 'sawtooth', sec.harmonyGain, t);
         t += dur;
       });
     }
@@ -633,9 +648,9 @@ const Sound = (() => {
     });
     // Drums — beats are positions in 0..16 (or fractional).
     const dg = sec.drumGain;
-    sec.kicks.forEach(beat  => drumKick (startTime + beat * BEAT, 0.40 * dg));
-    sec.snares.forEach(beat => drumSnare(startTime + beat * BEAT, 0.32 * dg));
-    sec.hats.forEach(beat   => drumHat  (startTime + beat * BEAT, 0.22 * dg));
+    sec.kicks.forEach(beat  => drumKick (startTime + beat * BEAT, 0.65 * dg));
+    sec.snares.forEach(beat => drumSnare(startTime + beat * BEAT, 0.50 * dg));
+    sec.hats.forEach(beat   => drumHat  (startTime + beat * BEAT, 0.35 * dg));
     return sectionEnd;
   }
   function startMusic() {
