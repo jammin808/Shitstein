@@ -500,10 +500,12 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
       // Any burn (10 or four-of-a-kind) clears the pack AND wipes any chain/skip state. This
       // matters most for a four-Jack burn — the cancel/add bookkeeping on pickupChain may have
       // left a residue from cards that are now in the burn pile, so reset to a clean slate.
+      // The Ace's called-suit constraint also resets — the Ace card is in the burn pile.
       state.pickupChain = 0;
       state.pendingBlackJacks = 0;
       state.pendingSkips = 0;
       state.lastEightPlayer = null;
+      state.aceSuit = null;
       state.burned += state.discard.length;
       state.discard = [];
       goAgain = true;
@@ -576,11 +578,13 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
     }
   }
 
-  // Ace suit override
-  if (survA > 0) {
-    state.aceSuit = aceSuit;
-  } else if (survivors.length > 0) {
-    state.aceSuit = null; // a non-A card established a new top
+  // Ace suit override — the called-suit constraint only applies when an Ace is the LAST
+  // surviving card on the discard top. A buried Ace mid-chain (e.g. K♠ + A♠ + Q♠) doesn't
+  // leave a called-suit constraint behind, since the next player plays on Q♠ not the Ace.
+  // The Ace's effect resets the moment another card is placed on top of it.
+  if (survivors.length > 0) {
+    const lastSurv = survivors[survivors.length - 1];
+    state.aceSuit = (lastSurv.rank === 'A') ? aceSuit : null;
   }
 
   // ---- Tags + event message ----
@@ -633,11 +637,12 @@ function blindFlip(state, faceDownIdx) {
     if (checkBurn(state)) {
       if (card.rank === '10') tenBurn = true;
       else                    fourOfKindBurn = true;
-      // Any burn clears the pack AND chain/skip state (see playCards for rationale).
+      // Any burn clears the pack AND chain/skip/aceSuit state (see playCards for rationale).
       state.pickupChain = 0;
       state.pendingBlackJacks = 0;
       state.pendingSkips = 0;
       state.lastEightPlayer = null;
+      state.aceSuit = null;
       state.burned += state.discard.length;
       state.discard = [];
       goAgain = true;
