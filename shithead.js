@@ -1302,10 +1302,10 @@ function renderTable() {
         const card = renderCard(c, { help: false });
         card.classList.add('fan-card');
         // Each card slides into view in sequence, like cards being laid down. Last card
-        // ends in the slot position; earlier cards trail to the LEFT with a 40% overlap so
-        // a long chain doesn't overflow the play panel.
+        // ends in the slot position; earlier cards trail to the LEFT with a 20% overlap
+        // (i.e. each card shows 80% of itself).
         const offsetSteps = (chain.length - 1 - i);
-        card.style.left = `calc(var(--card-w) * -0.4 * ${offsetSteps})`;
+        card.style.left = `calc(var(--card-w) * -0.8 * ${offsetSteps})`;
         card.style.zIndex = String(i + 1);
         card.style.animationDelay = `${i * 70}ms`;
         fan.appendChild(card);
@@ -1363,42 +1363,51 @@ function renderTable() {
     reserveEl.classList.toggle('faceup-active', myActive === 'faceUp');
   }
 
-  // ---- Face-down row ----
-  const fdEl = $('me-faceDown');
-  fdEl.innerHTML = '';
-  for (let i = 0; i < me.faceDown.length; i++) {
-    const card = renderCard(null, { back: true, size: 'small' });
-    if (state.phase === 'play' && state.current === myPlayerId && myActive === 'faceDown') {
-      card.classList.add('clickable');
-      card.title = 'Flip blindly';
-      card.addEventListener('click', () => onBlindFlipClicked(i));
-    }
-    fdEl.appendChild(card);
-  }
-
-  // ---- Face-up row ----
-  const fuEl = $('me-faceUp');
-  fuEl.innerHTML = '';
-  // Size the face-up cards: small while the reserve is stowed (hand still active), full size
-  // when the reserve is the active source so the player can read them clearly while choosing.
-  const fuSize = (myActive === 'faceUp') ? null : 'small';
-  me.faceUp.forEach((c, i) => {
-    const card = renderCard(c, fuSize ? { size: fuSize } : {});
-    if (state.phase === 'swap') {
-      card.classList.add('clickable');
-      if (swapSelected.faceUp === i) card.classList.add('selected');
-      card.addEventListener('click', () => onSwapFaceUpClick(i));
-    } else if (state.phase === 'play' && state.current === myPlayerId && myActive === 'faceUp') {
-      if (isSelected('faceUp', i)) card.classList.add('selected');
-      if (canSelect('faceUp', c)) {
-        card.classList.add('clickable');
-        card.addEventListener('click', () => onCardClick('faceUp', i));
-      } else {
-        card.classList.add('disabled');
+  // ---- Reserve pairs (face-down + face-up overlapping HORIZONTALLY per slot) ----
+  // Each "slot" is a face-down card with a face-up card sitting on top of it, offset
+  // horizontally so the back of the face-down card peeks out at the LEFT. The whole
+  // reserve renders as N pairs in a horizontal row.
+  const pairsEl = $('me-reserve-pairs');
+  if (pairsEl) {
+    pairsEl.innerHTML = '';
+    const N = me.faceDown.length;
+    for (let i = 0; i < N; i++) {
+      const pair = document.createElement('div');
+      pair.className = 'reserve-pair';
+      // Face-down (back) — sits at the bottom z-index of the pair.
+      const back = renderCard(null, { back: true, size: 'small' });
+      back.classList.add('reserve-back');
+      if (state.phase === 'play' && state.current === myPlayerId && myActive === 'faceDown') {
+        back.classList.add('clickable');
+        back.title = 'Flip blindly';
+        back.addEventListener('click', () => onBlindFlipClicked(i));
       }
+      pair.appendChild(back);
+      // Face-up — sits on top of the back, offset to the right so the back's left edge
+      // peeks out by 15%. Same size as the back when stowed; expands to full size when
+      // the reserve is the active source so the player can read it.
+      if (i < me.faceUp.length) {
+        const fuSize = (myActive === 'faceUp') ? null : 'small';
+        const up = renderCard(me.faceUp[i], fuSize ? { size: fuSize } : {});
+        up.classList.add('reserve-up');
+        if (state.phase === 'swap') {
+          up.classList.add('clickable');
+          if (swapSelected.faceUp === i) up.classList.add('selected');
+          up.addEventListener('click', () => onSwapFaceUpClick(i));
+        } else if (state.phase === 'play' && state.current === myPlayerId && myActive === 'faceUp') {
+          if (isSelected('faceUp', i)) up.classList.add('selected');
+          if (canSelect('faceUp', me.faceUp[i])) {
+            up.classList.add('clickable');
+            up.addEventListener('click', () => onCardClick('faceUp', i));
+          } else {
+            up.classList.add('disabled');
+          }
+        }
+        pair.appendChild(up);
+      }
+      pairsEl.appendChild(pair);
     }
-    fuEl.appendChild(card);
-  });
+  }
 
   // ---- Hand row ----
   const handEl = $('me-hand');

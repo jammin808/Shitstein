@@ -384,23 +384,51 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   opacity: 0.85;
   font-style: italic;
 }
-.me-stacks { display: flex; flex-direction: column; gap: 0; align-items: center; }
-.stack-row { display: flex; gap: 8px; justify-content: center; }
-/* Bigger reserve cards (vs the standard small size used in opponents). The player's own
-   reserve gets readable cards even when stowed — small is 38×54 by default; this bumps
-   them to 66×92 so the rank/suit are easy to scan. */
-.me-area .stacks-blind .card.small,
-.me-area .stacks-up    .card.small {
+/* Reserve pairs: each slot is a face-down card with a face-up card offset horizontally
+   over it. The whole reserve renders as a row of these pairs. */
+.reserve-pairs {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  align-items: center;
+}
+.reserve-pair {
+  position: relative;
+  width: 66px;
+  height: 92px;
+  flex: 0 0 auto;
+}
+/* Bigger reserve cards (vs the standard small size used in opponents). 66×92 is readable
+   without dominating the panel. */
+.reserve-pair .card.small {
   --card-w: 66px;
   --card-h: 92px;
 }
-/* Face-up cards overlay the face-down cards by 85%, giving a stacked-pile look — face-up
-   on top with the back of the face-down cards peeking out at the top (15%). When the
-   reserve becomes the active source, face-up cards expand to full size and the overlap
-   is removed so they sit cleanly below the face-down row. The transition makes that
-   state-change animate smoothly. */
-.stacks-up { margin-top: -78px; position: relative; z-index: 2; transition: margin-top 0.4s cubic-bezier(0.34, 1.2, 0.64, 1); }
-.reserve.faceup-active .stacks-up { margin-top: 6px; z-index: 1; }
+.reserve-pair .reserve-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+/* Face-up sits on top of the back, offset horizontally to the RIGHT by 15% of card-w so
+   the back's left edge peeks out. The 85% horizontal overlap replaces the previous
+   vertical overlap. Transition makes the offset animate when the reserve becomes the
+   active source and the face-up expands. */
+.reserve-pair .reserve-up {
+  position: absolute;
+  top: 0;
+  left: 15%;
+  z-index: 2;
+  transition: left 0.4s cubic-bezier(0.34, 1.2, 0.64, 1), transform 0.13s ease, filter 0.13s ease;
+}
+/* When face-up is the active play source, slide it OUT to the right of the back so the
+   player can read both cards without the overlap getting in the way of selection. */
+.reserve.faceup-active .reserve-pair {
+  width: 130px;
+}
+.reserve.faceup-active .reserve-pair .reserve-up {
+  left: 70%;
+}
 
 /* The hand sits in its own elevated panel — bigger, brighter background, brighter label. The
    contrast with the recessed reserve panel makes "what's playable now" unambiguous. */
@@ -1126,7 +1154,7 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .middle {
     grid-area: middle;
     margin: 0;
-    height: calc(var(--pile-card-h) + 16px);
+    height: calc(var(--pile-card-h) + 12px);
     background:
       radial-gradient(ellipse at 50% 35%, rgba(0,0,0,0.10), rgba(0,0,0,0.42) 90%),
       linear-gradient(135deg, rgba(31, 93, 58, 0.55), rgba(15, 58, 35, 0.65));
@@ -1138,7 +1166,8 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
     box-shadow:
       inset 0 4px 16px rgba(0,0,0,0.40),
       inset 0 -1px 0 rgba(255,255,255,0.04);
-    padding: 8px 18px;
+    /* Less bottom padding so the cards sit closer to the me-area below. */
+    padding: 6px 18px 4px;
     gap: 36px;
   }
   /* Stop me-area's flex children from growing/shrinking — every section sizes to its
@@ -1150,9 +1179,11 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .reserve { min-height: 110px; box-sizing: border-box; }
   .me-area {
     grid-area: me-area;
-    margin-top: 0;
+    /* Pull up by 1px so the me-area's top edge lands ON the play panel's bottom edge,
+       guaranteeing zero visible gap regardless of subpixel rounding. */
+    margin-top: -1px;
     max-width: none;
-    padding: 4px 14px;
+    padding: 0 14px 4px;
     /* Connect with the play panel above — no top border, matching corner radius (16),
        no gap. Visually a single panel split into "table" and "you" halves. */
     border-top: none;
@@ -1160,6 +1191,8 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
     display: flex;
     flex-direction: column;
     gap: 0;
+    position: relative;
+    z-index: 1;
   }
   .me-header { margin-bottom: 0; flex: 0 0 auto; }
   .reserve { padding: 2px 10px; margin: 0; border-radius: 8px; flex: 0 0 auto; }
