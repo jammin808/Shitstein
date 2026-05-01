@@ -230,20 +230,20 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 /* ======================= GAME TABLE ======================= */
-#table { padding: 14px 14px 20px; min-height: calc(100vh - 50px); }
+#table { padding: 12px; min-height: calc(100vh - 50px); }
 
 .opponents {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .opponent {
   background: rgba(0,0,0,0.32);
   border-radius: 12px;
-  padding: 12px 16px;
-  min-width: 210px;
+  padding: 10px 12px;
+  min-width: 200px;
   border: 2px solid transparent;
   transition: border-color 0.2s, box-shadow 0.2s;
   position: relative;
@@ -282,6 +282,29 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   width: var(--card-w);
   height: var(--card-h);
   position: relative;
+}
+
+/* When the most recent play was a chain, the discard slot fans the cards out to the LEFT
+   so the player can read each one. The newest card stays at the slot's nominal position
+   (right end of the fan); earlier cards sit half-hidden behind it. Cards animate in
+   sequentially via the fan-card-land keyframe. */
+.discard-fan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.discard-fan .card.fan-card {
+  position: absolute;
+  top: 0;
+  width: var(--card-w);
+  height: var(--card-h);
+  animation: fan-card-land 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@keyframes fan-card-land {
+  0%   { transform: translateY(-26px) scale(1.08) rotate(-3deg); opacity: 0; }
+  60%  { transform: translateY(2px)   scale(1.02); opacity: 1; }
+  100% { transform: translateY(0)     scale(1); opacity: 1; }
 }
 .empty-slot {
   width: 100%; height: 100%;
@@ -862,11 +885,70 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ============================================================
  *  RESPONSIVE / DEVICE-ADAPTIVE LAYOUT
  *  Three target experiences:
- *    - Desktop / laptop  (default, > 1024px)
- *    - Tablet / iPad     (641-1024px)
- *    - Phone             (≤ 640px)
+ *    - Desktop / laptop  (default, > 1024px) — three-column grid
+ *    - Tablet / iPad     (641-1024px)        — single column with right rail
+ *    - Phone             (≤ 640px)           — single column, no right rail
  *  Plus a `pointer: coarse` block for touch-only enhancements.
  * ============================================================ */
+
+/* ---- Desktop three-column grid: opponents | play | log ---- */
+@media (min-width: 1100px) {
+  #table {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr) 270px;
+    grid-template-rows: auto auto auto auto;
+    column-gap: 14px;
+    row-gap: 10px;
+    padding: 12px;
+    align-items: start;
+  }
+  .opponents {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 0;
+    position: sticky;
+    top: 76px;
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .opponent {
+    min-width: 0;
+    width: 100%;
+    padding: 8px 10px;
+  }
+  .opponent-name { font-size: 14px; }
+  .opponent-counts { font-size: 12px; }
+  .opponent-stacks { min-height: 48px; }
+  .opponent-stacks .card.small { --card-w: 32px; --card-h: 46px; }
+  .opponent-hand .card.tiny    { --card-w: 18px; --card-h: 26px; }
+  .middle      { grid-column: 2; grid-row: 1; margin: 6px 0 4px; }
+  .play-hint   { grid-column: 2; grid-row: 2; margin: 0; max-width: none; }
+  #action-bar  { grid-column: 2; grid-row: 3; margin: 0; max-width: none; }
+  .me-area     { grid-column: 2; grid-row: 4; margin-top: 4px; max-width: none; }
+  .action-log {
+    grid-column: 3;
+    grid-row: 1 / -1;
+    position: sticky;
+    top: 76px;
+    width: auto;
+    right: auto;
+    max-height: calc(100vh - 90px);
+    margin: 0;
+  }
+  /* Tightening when constrained to the centre column */
+  .me-area { padding: 10px 14px 14px; }
+  .reserve { padding: 6px 12px 8px; margin-bottom: 8px; }
+  .hand-section { padding: 8px 12px 10px; }
+  .reserve-label, .hand-label { margin-bottom: 4px; }
+  .me-header { margin-bottom: 6px; }
+  .emoji-picker { margin-top: 8px; padding: 6px 10px; }
+  .emoji-btn { width: 32px; height: 32px; font-size: 16px; }
+}
 
 /* ---- Tablet (iPad portrait/landscape, smaller laptops) ---- */
 @media (max-width: 1024px) and (min-width: 641px) {

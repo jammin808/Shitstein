@@ -614,6 +614,10 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
   state.lastEvent = `${p.name} plays ${cardList}.${burnMsg}${revMsg}${skipMsg}${chainMsg}${aceMsg}${againMsg}${kpMsg}`;
   state.lastEventTags = tags;
   state.lastEventPlayer = p.id;
+  // Snapshot the played cards so the renderer can fan them out on the discard for visual
+  // clarity (especially useful for multi-card chains). Burned chains snapshot the burned
+  // cards so the player can still see what burned. Single-card plays just hold one card.
+  state.lastPlayCards = cards.map(c => ({ rank: c.rank, suit: c.suit }));
 
   const finished = checkPlayerOut(state, p);
   if (finished) tags.push('finished');
@@ -706,6 +710,7 @@ function blindFlip(state, faceDownIdx) {
     state.lastEvent = `${p.name} flips ${card.rank}${SUIT_SYM[card.suit]} blind — and it plays!${burnMsg}${revMsg}${skipMsg}${chainMsg}${aceMsg}${againMsg}${kpMsg}`;
     state.lastEventTags = tags;
     state.lastEventPlayer = p.id;
+    state.lastPlayCards = [{ rank: card.rank, suit: card.suit }];
 
     const finished = checkPlayerOut(state, p);
     if (finished) tags.push('finished');
@@ -753,6 +758,7 @@ function pickUp(state) {
   state.discard = [];
   state.lastEvent = `${p.name} picks up the pile.`;
   state.lastEventTags = ['pickUp'];
+  state.lastPlayCards = null;
   state.lastEventPlayer = p.id;
   advanceTurn(state);
   return { ok: true };
@@ -769,6 +775,7 @@ function takeChain(state) {
   state.pendingSkips = 0;        // chain takes precedence over any queued skips
   state.lastEvent = `${p.name} takes ${taken} card${taken === 1 ? '' : 's'} from the deck. Chain consumed.`;
   state.lastEventTags = ['chainTaken'];
+  state.lastPlayCards = null;
   state.lastEventPlayer = p.id;
   advanceTurn(state);
   return { ok: true, taken };
@@ -780,6 +787,7 @@ function skipTurn(state) {
   state.pendingSkips -= 1;
   state.lastEvent = `${p.name} is skipped — better luck next round.${state.pendingSkips > 0 ? ' (' + state.pendingSkips + ' skip' + (state.pendingSkips === 1 ? '' : 's') + ' still queued)' : ''}`;
   state.lastEventTags = ['skip'];
+  state.lastPlayCards = null;
   state.lastEventPlayer = p.id;
   advanceTurn(state);
   return { ok: true };
@@ -1211,12 +1219,36 @@ function renderTable() {
   discardEl.innerHTML = '';
   const top = topDiscard(state);
   if (top) {
-    discardEl.appendChild(renderCard(top));
+    // If the most recent move was a multi-card chain, fan the cards out (50% horizontal
+    // overlap, newest on the right at the slot's nominal position) so the player can read
+    // each rank/suit. Single-card plays render the same as before.
+    const chain = (state.lastPlayCards && state.lastPlayCards.length > 1) ? state.lastPlayCards : null;
+    if (chain) {
+      discardEl.classList.add('has-fan');
+      const fan = document.createElement('div');
+      fan.className = 'discard-fan';
+      chain.forEach((c, i) => {
+        const card = renderCard(c, { help: false });
+        card.classList.add('fan-card');
+        // Each card slides into view in sequence, like cards being laid down. Last card
+        // ends in the slot position; earlier cards trail to the LEFT with a 50% overlap.
+        const offsetSteps = (chain.length - 1 - i);
+        card.style.left = `calc(var(--card-w) * -0.5 * ${offsetSteps})`;
+        card.style.zIndex = String(i + 1);
+        card.style.animationDelay = `${i * 70}ms`;
+        fan.appendChild(card);
+      });
+      discardEl.appendChild(fan);
+    } else {
+      discardEl.classList.remove('has-fan');
+      discardEl.appendChild(renderCard(top));
+    }
     const cnt = document.createElement('div');
     cnt.className = 'pile-count';
     cnt.textContent = `${state.discard.length} card${state.discard.length === 1 ? '' : 's'}`;
     discardEl.appendChild(cnt);
   } else {
+    discardEl.classList.remove('has-fan');
     const e = document.createElement('div');
     e.className = 'empty-slot';
     e.textContent = 'discard';
@@ -2538,6 +2570,7 @@ function serializeStateFor(s, viewerId) {
     lastEventPlayer: s.lastEventPlayer,
     swapReady: [...(s.swapReady || [])],
     shithead: s.shithead,
+    lastPlayCards: s.lastPlayCards ? s.lastPlayCards.slice() : null,
   };
 }
 
@@ -2561,6 +2594,7 @@ function deserializeStateForClient(packet) {
     lastEventPlayer: packet.lastEventPlayer != null ? packet.lastEventPlayer : null,
     swapReady: new Set(packet.swapReady),
     shithead: packet.shithead,
+    lastPlayCards: packet.lastPlayCards || null,
   };
 }
 
