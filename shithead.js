@@ -317,6 +317,51 @@ function getActiveSource(p, state) {
   return null;
 }
 
+// Build a brief, situation-aware hint for the human player. Reads the top card and any active
+// chain/skip state so the user knows what their legal actions actually are this turn.
+function buildActionHint(state, myPlayerId, myActive) {
+  if (state.phase === 'swap')   return 'Click a hand card and a face-up card to swap them.';
+  if (state.phase === 'over')   return '';
+  if (state.current !== myPlayerId) return 'Watching…';
+
+  if (state.pickupChain > 0) {
+    return `📤 Pickup chain at +${state.pickupChain}. Counter with a 2 (+2), black J (+5), red J (cancels), or 10 (burns). Or click Take from Deck.`;
+  }
+  if (state.pendingSkips > 0) {
+    return `💤 ${state.pendingSkips} skip${state.pendingSkips === 1 ? '' : 's'} queued. Play another 8 to escape (and stack), or click Skip Turn.`;
+  }
+  if (myActive === 'faceDown') return '🙈 Hand, face-up and deck all empty — flip a face-down card, blind. Brace yourself.';
+  if (myActive === 'faceUp')   return 'Hand and deck empty — play from your face-up cards.';
+
+  const top = topDiscard(state);
+  if (!top) return 'Pile empty — anything goes.';
+  const sym = SUIT_SYM[top.suit];
+  // 2 / 10 are wild leads, an Ace is wild (with naming) — these always apply unless a chain/
+  // skip is up, both of which we've already returned for above.
+  const wildOptions = 'Or play a 2, a 10 (burns), or an Ace (you name the suit).';
+
+  if (top.rank === 'A' && state.aceSuit) {
+    return `🎩 Top is A${sym}, suit called ${SUIT_SYM[state.aceSuit]}. Follow ${SUIT_SYM[state.aceSuit]} (any rank), or pair with another A. ${wildOptions}`;
+  }
+  if (top.rank === 'K') {
+    return `👑 Top is K${sym}. Follow with another K, an A, or any ${sym}. ${wildOptions}`;
+  }
+  if (top.rank === 'Q') {
+    return `Top is Q${sym}. Follow with another Q, K${sym} or A${sym} (higher in suit). ${wildOptions}`;
+  }
+  if (top.rank === 'J') {
+    return `Top is J${sym}. Follow with another J, or higher in ${sym} (Q/K/A). ${wildOptions}`;
+  }
+  if (top.rank === '8') {
+    return `Top is 8${sym}. Follow with another 8 or higher in ${sym}. ${wildOptions}`;
+  }
+  if (top.rank === '7') {
+    return `🔒 Top is 7${sym}. Play any 2-7 (any suit) or a 10 to burn. 8 / 9 / J / Q / K / A are blocked.`;
+  }
+  // Plain number cards (3, 4, 5, 6, 9, 10).
+  return `Top is ${top.rank}${sym}. Match the rank, or play higher in ${sym}. ${wildOptions}`;
+}
+
 function checkBurn(state) {
   const top = topDiscard(state);
   if (!top) return false;
@@ -1175,14 +1220,7 @@ function renderTable() {
   $('me-label').textContent = `${me.name}${(state.current === myPlayerId && state.phase === 'play') ? ' — your turn' : ''}`;
   const meHint = $('me-hint');
   const myActive = getActiveSource(me, state);
-  if (state.phase === 'swap')                          meHint.textContent = 'Click a hand card and a face-up card to swap them.';
-  else if (state.phase === 'over')                      meHint.textContent = '';
-  else if (state.current !== myPlayerId)                meHint.textContent = 'Watching…';
-  else if (state.pickupChain > 0)                        meHint.textContent = `Pickup chain: +${state.pickupChain}. Play a 2 (+2), a black Jack (+5), a red Jack (cancels a black Jack), or take the cards.`;
-  else if (state.pendingSkips > 0)                      meHint.textContent = `8 played — ${state.pendingSkips} skip${state.pendingSkips === 1 ? '' : 's'} queued. Play an 8 to escape (and add to the queue), or click Skip Turn.`;
-  else if (myActive === 'faceDown')                     meHint.textContent = 'Flip a face-down card. Brace yourself.';
-  else if (myActive === 'faceUp')                       meHint.textContent = 'Hand and deck empty — play from your face-up cards. Follow suit, or play a special.';
-  else                                                  meHint.textContent = 'Follow suit, or play a special. Same-rank cards stack.';
+  meHint.textContent = buildActionHint(state, myPlayerId, myActive);
 
   // ---- Face-down row ----
   const fdEl = $('me-faceDown');
