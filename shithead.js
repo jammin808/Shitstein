@@ -117,6 +117,7 @@ const Sound = (() => {
   let muted        = (typeof localStorage !== 'undefined' && localStorage.getItem('shitstein-muted') === '1');
   let musicEnabled = (typeof localStorage === 'undefined' || localStorage.getItem('shitstein-music') !== '0');
 
+  let musicFilter = null; // shared low-pass on the music bus, swept by intensity
   function init() {
     if (ctx) return ctx;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -125,12 +126,20 @@ const Sound = (() => {
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 1;
     master.connect(ctx.destination);
-    musicGain = ctx.createGain();
-    musicGain.gain.value = 0.10;
-    musicGain.connect(master);
     sfxGain = ctx.createGain();
     sfxGain.gain.value = 0.45;
     sfxGain.connect(master);
+    // Music chain: musicGain → musicFilter (LPF) → master. The filter cutoff is animated
+    // by computeIntensity at every section boundary so the music opens up in tense moments
+    // and feels muffled / distant during calm play. This is the main psychological dial.
+    musicGain = ctx.createGain();
+    musicGain.gain.value = 0.10;
+    musicFilter = ctx.createBiquadFilter();
+    musicFilter.type = 'lowpass';
+    musicFilter.frequency.value = 1800;
+    musicFilter.Q.value = 0.5;
+    musicGain.connect(musicFilter);
+    musicFilter.connect(master);
     return ctx;
   }
   function resume() {
@@ -303,13 +312,21 @@ const Sound = (() => {
     osc.start(when); osc.stop(when + dur);
   }
 
-  // Section patterns. Each section is 16 beats (4 bars × 4 beats). Notes are [Hz, beats].
+  // Section library — 16 beats each (4 bars × 4 beats). Notes are [Hz, beats].
+  // Sections: A / A2 (calm, alternating), B / B2 (verse, alternating), C / C2 (intense,
+  // alternating), D (climax, rare). The variants are picked probabilistically so the
+  // same intensity level doesn't loop the same phrase forever — psychological captivation
+  // comes from familiarity + variation, not repetition.
   const SECTIONS = {
-    A: {
-      // Calm — sparse melody, slow bass, kick on downbeats, light hat.
+    A: { // Calm — sparse, contemplative descending arpeggio
       melody: [
-        [440, 2], [523, 2], [659, 2], [523, 2],
-        [587, 2], [494, 2], [440, 4],
+        [659, 1.5], [587, 0.5], [523, 1], [440, 1],
+        [523, 1.5], [440, 0.5], [392, 1], [330, 1],
+        [440, 2], [523, 2],
+        [392, 2], [330, 2],
+      ],
+      harmony: [ // ethereal pad notes, octave above bass root
+        [220, 4], [220, 4], [196, 4], [165, 4],
       ],
       bass: [
         [110, 4], [110, 4], [98, 4], [82, 4],
@@ -317,15 +334,38 @@ const Sound = (() => {
       kicks:  [0, 4, 8, 12],
       snares: [],
       hats:   [0, 2, 4, 6, 8, 10, 12, 14],
-      melodyGain: 0.085, bassGain: 0.16, drumGain: 0.55,
+      melodyGain: 0.085, bassGain: 0.16, harmonyGain: 0.04, drumGain: 0.55,
     },
-    B: {
-      // Verse — fuller melody, walking bass, backbeat snare, hat on every beat.
+    A2: { // Calm variant — same chord shape, ascending melodic answer
+      melody: [
+        [330, 1], [392, 1], [440, 1], [523, 1],
+        [587, 1], [523, 1], [440, 1], [392, 1],
+        [440, 2], [523, 2],
+        [659, 2], [440, 2],
+      ],
+      harmony: [
+        [262, 4], [262, 4], [294, 4], [330, 4],
+      ],
+      bass: [
+        [110, 4], [110, 4], [98, 4], [82, 4],
+      ],
+      kicks:  [0, 4, 8, 12],
+      snares: [],
+      hats:   [0, 2, 4, 6, 8, 10, 12, 14],
+      melodyGain: 0.085, bassGain: 0.16, harmonyGain: 0.04, drumGain: 0.55,
+    },
+    B: { // Verse — confident hook, walking bass, backbeat snare
       melody: [
         [440, 1], [523, 1], [659, 1], [523, 1],
         [587, 1], [698, 1], [659, 1], [523, 1],
         [494, 1], [587, 1], [698, 1], [587, 1],
         [523, 2], [440, 2],
+      ],
+      harmony: [ // syncopated thirds, off-beat
+        [0, 0.5], [330, 0.5], [0, 0.5], [330, 0.5],
+        [0, 0.5], [392, 0.5], [0, 0.5], [392, 0.5],
+        [0, 0.5], [330, 0.5], [0, 0.5], [294, 0.5],
+        [330, 2], [262, 2],
       ],
       bass: [
         [110, 2], [165, 2], [87, 2], [131, 2],
@@ -334,10 +374,33 @@ const Sound = (() => {
       kicks:  [0, 4, 8, 12],
       snares: [2, 6, 10, 14],
       hats:   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-      melodyGain: 0.10, bassGain: 0.18, drumGain: 0.85,
+      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.05, drumGain: 0.85,
     },
-    C: {
-      // Intense — 8th-note runs, harmony voice, 4-on-the-floor kick, 16th hi-hats.
+    B2: { // Verse variant — descending hook with anticipation
+      melody: [
+        [880, 1], [784, 1], [659, 1], [523, 1],
+        [440, 0.5], [523, 0.5], [659, 1], [523, 0.5], [440, 0.5],
+        [330, 1], [392, 1], [440, 1], [523, 1],
+        [659, 2], [440, 2],
+      ],
+      harmony: [
+        [0, 1], [392, 1], [0, 1], [262, 1],
+        [0, 1], [330, 1], [0, 1], [262, 1],
+        [220, 2], [330, 2],
+        [392, 2], [330, 2],
+      ],
+      bass: [
+        [110, 1], [110, 1], [165, 2],
+        [87, 1], [87, 1], [131, 2],
+        [98, 1], [98, 1], [147, 2],
+        [82, 2], [110, 2],
+      ],
+      kicks:  [0, 4, 8, 12],
+      snares: [2, 6, 10, 14],
+      hats:   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.05, drumGain: 0.85,
+    },
+    C: { // Intense — 8th-note arpeggios, full harmony, 4-on-the-floor + 16th hats
       melody: [
         [440, 0.5], [659, 0.5], [880, 0.5], [659, 0.5],
         [698, 0.5], [880, 0.5], [988, 0.5], [880, 0.5],
@@ -352,18 +415,88 @@ const Sound = (() => {
         [330, 2], [392, 2], [440, 2], [330, 2],
         [262, 2], [330, 2], [220, 2], [262, 2],
       ],
-      bass: [
-        [110, 1], [110, 1], [165, 1], [165, 1],
-        [87, 1], [87, 1], [131, 1], [131, 1],
-        [98, 1], [98, 1], [147, 1], [147, 1],
-        [82, 1], [110, 1], [82, 1], [110, 1],
+      bass: [ // arpeggiated chord tones (root, 5th, octave, 5th)
+        [110, 0.5], [165, 0.5], [220, 0.5], [165, 0.5],
+        [110, 0.5], [165, 0.5], [220, 0.5], [165, 0.5],
+        [87, 0.5],  [131, 0.5], [175, 0.5], [131, 0.5],
+        [82, 0.5],  [123, 0.5], [165, 0.5], [123, 0.5],
+        [98, 0.5],  [147, 0.5], [196, 0.5], [147, 0.5],
+        [82, 0.5],  [123, 0.5], [165, 0.5], [123, 0.5],
+        [110, 0.5], [165, 0.5], [220, 0.5], [165, 0.5],
+        [110, 0.5], [165, 0.5], [220, 0.5], [165, 0.5],
       ],
       kicks:  [0, 2, 4, 6, 8, 10, 12, 14],
       snares: [2, 6, 10, 14],
       hats:   Array.from({ length: 32 }, (_, i) => i * 0.5),
-      melodyGain: 0.10, bassGain: 0.18, drumGain: 1.0, harmonyGain: 0.06,
+      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.06, drumGain: 1.0,
+    },
+    C2: { // Intense variant — descending lead, syncopated harmony
+      melody: [
+        [988, 0.5], [880, 0.5], [988, 0.5], [1047, 0.5],
+        [1175, 1], [988, 1],
+        [880, 0.5], [988, 0.5], [880, 0.5], [784, 0.5],
+        [659, 1], [523, 1],
+        [988, 0.5], [880, 0.5], [988, 0.5], [880, 0.5],
+        [784, 0.5], [659, 0.5], [587, 0.5], [523, 0.5],
+        [440, 0.5], [523, 0.5], [659, 0.5], [880, 0.5],
+        [659, 2],
+      ],
+      harmony: [ // thirds following the lead with offset
+        [392, 1], [440, 1], [330, 1], [392, 1],
+        [330, 1], [392, 1], [262, 1], [330, 1],
+        [392, 2], [262, 2],
+        [220, 2], [330, 2],
+      ],
+      bass: [
+        [110, 0.5], [220, 0.5], [110, 0.5], [220, 0.5],
+        [165, 0.5], [220, 0.5], [165, 0.5], [220, 0.5],
+        [87, 0.5],  [175, 0.5], [87, 0.5],  [175, 0.5],
+        [98, 0.5],  [196, 0.5], [98, 0.5],  [196, 0.5],
+        [110, 0.5], [220, 0.5], [110, 0.5], [220, 0.5],
+        [82, 0.5],  [165, 0.5], [82, 0.5],  [165, 0.5],
+        [110, 0.5], [165, 0.5], [220, 0.5], [165, 0.5],
+        [110, 2],
+      ],
+      kicks:  [0, 2, 4, 6, 8, 10, 12, 14],
+      snares: [2, 6, 10, 14],
+      hats:   Array.from({ length: 32 }, (_, i) => i * 0.5),
+      melodyGain: 0.10, bassGain: 0.18, harmonyGain: 0.06, drumGain: 1.0,
+    },
+    D: { // Climax / bridge — modulation to D minor, snare rolls, peak intensity
+      melody: [
+        [587, 0.5], [698, 0.5], [880, 0.5], [1175, 0.5],
+        [1047, 1], [880, 1],
+        [698, 0.5], [880, 0.5], [1047, 0.5], [1175, 0.5],
+        [1397, 2],
+        [1175, 0.5], [1047, 0.5], [880, 0.5], [698, 0.5],
+        [880, 1], [698, 1],
+        [587, 0.5], [698, 0.5], [880, 0.5], [1047, 0.5],
+        [880, 2],
+      ],
+      harmony: [
+        [440, 1], [523, 1], [659, 1], [880, 1],
+        [659, 4],
+        [523, 1], [659, 1], [880, 1], [1047, 1],
+        [880, 4],
+      ],
+      bass: [
+        [73, 0.5], [110, 0.5], [147, 0.5], [110, 0.5],
+        [73, 0.5], [110, 0.5], [147, 0.5], [110, 0.5],
+        [73, 0.5], [147, 0.5], [220, 0.5], [147, 0.5],
+        [73, 0.5], [147, 0.5], [220, 0.5], [147, 0.5],
+        [82, 0.5], [123, 0.5], [165, 0.5], [123, 0.5],
+        [98, 0.5], [147, 0.5], [196, 0.5], [147, 0.5],
+        [73, 0.5], [110, 0.5], [147, 0.5], [110, 0.5],
+        [73, 4],
+      ],
+      kicks:  [0, 2, 4, 6, 8, 10, 12, 14],
+      snares: [2, 4, 6, 7, 10, 12, 14, 15], // includes a roll fill at the end of bars 2 and 4
+      hats:   Array.from({ length: 32 }, (_, i) => i * 0.5),
+      melodyGain: 0.11, bassGain: 0.20, harmonyGain: 0.07, drumGain: 1.0,
     },
   };
+  // Track previous section so variant rotation can pick a different sibling next time.
+  let _lastSection = null;
 
   function computeIntensity() {
     if (typeof state === 'undefined' || !state || state.phase !== 'play') return 0;
@@ -377,10 +510,42 @@ const Sound = (() => {
     if ((state.discard.length || 0) > 7) i = Math.max(i, 0.50);
     return i;
   }
+  // Pick the next section. At each intensity tier there's a "main" section and a "variant"
+  // (A/A2, B/B2, C/C2). We rotate the pair so the same phrase doesn't repeat back-to-back.
+  // At very high intensity, occasionally drop the climax (D — a modulation to D minor with
+  // snare rolls and peak energy) for a satisfying release.
   function pickSection(intensity) {
-    if (intensity >= 0.70) return 'C';
-    if (intensity >= 0.40) return 'B';
-    return 'A';
+    let pool;
+    if (intensity >= 0.85) {
+      // Climax can fire ~30% of the time at peak intensity; otherwise stay in C/C2.
+      if (Math.random() < 0.30 && _lastSection !== 'D') return (_lastSection = 'D');
+      pool = ['C', 'C2'];
+    } else if (intensity >= 0.70) {
+      pool = ['C', 'C2'];
+    } else if (intensity >= 0.40) {
+      pool = ['B', 'B2'];
+    } else {
+      pool = ['A', 'A2'];
+    }
+    // Prefer the variant that wasn't last played for natural rotation; if neither matches,
+    // pick at random (slight bias toward variation).
+    const next = pool.includes(_lastSection)
+      ? pool.find(s => s !== _lastSection)
+      : pool[Math.random() < 0.55 ? 0 : 1];
+    _lastSection = next;
+    return next;
+  }
+  // Sweep the music low-pass filter toward an intensity-driven cutoff so the music opens
+  // up (bright, present) when the game is tense and closes down (mellow, distant) during
+  // calm passages. Small amount of psychoacoustic drama for free.
+  function sweepMusicFilter(intensity, when, duration) {
+    if (!musicFilter || !ctx) return;
+    const target = 1100 + intensity * 5500; // ~1100 Hz calm, ~6600 Hz peak
+    try {
+      musicFilter.frequency.cancelScheduledValues(when);
+      musicFilter.frequency.setValueAtTime(musicFilter.frequency.value, when);
+      musicFilter.frequency.linearRampToValueAtTime(target, when + Math.max(0.5, duration * 0.6));
+    } catch (_) {}
   }
   // Schedule one section starting at `startTime`. Returns the section's end time.
   function scheduleSection(name, startTime) {
@@ -429,8 +594,10 @@ const Sound = (() => {
       const section = pickSection(intensity);
       const start = Math.max(ctx.currentTime + 0.05, musicLoopEnd);
       musicLoopEnd = scheduleSection(section, start);
-      const dur = musicLoopEnd - ctx.currentTime;
-      musicSchedTimer = setTimeout(loop, Math.max(500, (dur - 0.4) * 1000));
+      const dur = musicLoopEnd - start;
+      sweepMusicFilter(intensity, start, dur);
+      const lookahead = musicLoopEnd - ctx.currentTime;
+      musicSchedTimer = setTimeout(loop, Math.max(500, (lookahead - 0.4) * 1000));
     };
     loop();
   }
@@ -584,7 +751,9 @@ function chainStep(card, prevCard) {
 function canPlayCard(card, state) {
   // Pickup chain: 2 / black-J / red-J-cancel extend or counter the chain. A 10 is universally
   // wild and clears the pack — including the chain.
-  if (state.pickupChain > 0) {
+  // House rule: once the deck is empty, all 2/Jack pickup penalties are bypassed for the
+  // rest of the game — the next player just plays normally on the chain card.
+  if (state.pickupChain > 0 && state.deck.length > 0) {
     if (card.rank === '10') return true;
     if (card.rank === '2') return true;
     if (isJackBlack(card)) return true;
@@ -902,13 +1071,17 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
   let skipSet = false;
   if (surv8 > 0) { state.pendingSkips += surv8; state.lastEightPlayer = p.id; skipSet = surv8; }
 
-  // Pickup chain effects
+  // Pickup chain effects. House rule: once the deck is empty there's nothing to draw, so
+  // 2 / black-Jack penalties are silently dropped instead of accumulating a chain that
+  // can't be enforced. Red Jacks still cancel any leftover pending black Jacks (cosmetic
+  // bookkeeping — the chain itself is moot once the deck is gone).
   let chainAdd = 0, chainCancel = 0;
-  if (surv2 > 0) {
+  const deckEmpty = state.deck.length === 0;
+  if (surv2 > 0 && !deckEmpty) {
     state.pickupChain += 2 * surv2;
     chainAdd += 2 * surv2;
   }
-  if (survBJ > 0) {
+  if (survBJ > 0 && !deckEmpty) {
     state.pickupChain += 5 * survBJ;
     state.pendingBlackJacks += survBJ;
     chainAdd += 5 * survBJ;
