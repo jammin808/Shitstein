@@ -551,9 +551,8 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: 13px;
   line-height: 1.4;
   border-left: 3px solid var(--accent);
-  animation: log-stream 0.45s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+  animation: log-stream 0.55s ease-out both;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  transform-origin: right top;
 }
 .action-log .log-entry .who { font-weight: 700; color: var(--accent); }
 .action-log .log-entry .what { opacity: 0.92; }
@@ -562,13 +561,12 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   from { transform: translateX(20px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
-/* Streamed log entries: slide in from the right while existing entries shift down to make
-   room. The expanding max-height + padding gives a smooth "growth from nothing" effect
-   instead of a hard jump. */
+/* Streamed log entries: gentle slide in from the right while max-height expands from 0 so
+   the existing entries below ease down to make room. Pure ease-out, no scale/overshoot —
+   so the eye reads it as a smooth stream, not a flash. */
 @keyframes log-stream {
-  0%   { transform: translateX(36px) scale(0.92); opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: -6px; border-top-width: 0; border-bottom-width: 0; }
-  60%  { transform: translateX(0)    scale(1.02); opacity: 1; max-height: 200px; padding-top: 9px; padding-bottom: 9px; margin-bottom: 0; }
-  100% { transform: translateX(0)    scale(1);    opacity: 1; max-height: 200px; padding-top: 9px; padding-bottom: 9px; margin-bottom: 0; }
+  0%   { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: -4px; transform: translateX(12px); }
+  100% { opacity: 1; max-height: 200px; padding-top: 9px; padding-bottom: 9px; margin-bottom: 0; transform: translateX(0); }
 }
 
 /* ======================= EMOJI PICKER (human reactions) ======================= */
@@ -819,6 +817,110 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .discard .card.fresh { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
+/* ======================= SPECIAL CARD PLAY EFFECTS =======================
+   Each special card type gets a unique animation when it lands on the discard. The card
+   itself does a card-specific pulse / spin / shimmer; a floating stamp briefly hovers
+   over the discard to call out the effect (+2, ↻, 👑, etc).
+   ======================================================================== */
+
+/* The floating "stamp" over the discard */
+.card-fx {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+  font-weight: 900;
+  font-family: Georgia, "Times New Roman", serif;
+  pointer-events: none;
+  z-index: 90;
+  text-shadow: 0 3px 10px rgba(0,0,0,0.7), 0 0 20px rgba(0,0,0,0.4);
+  animation: card-fx-pop 1.05s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes card-fx-pop {
+  0%   { opacity: 0; transform: scale(0.4) translateY(8px); }
+  35%  { opacity: 1; transform: scale(1.25) translateY(-6px); }
+  75%  { opacity: 1; transform: scale(1.35) translateY(-22px); }
+  100% { opacity: 0; transform: scale(1.5) translateY(-44px); }
+}
+
+/* 2 — pickup +2: gold pulse with double-ring */
+.card-fx.fx-2-stamp { color: #f4d35e; }
+@keyframes fx-2-pulse {
+  0%, 100% { box-shadow: inset 0 4px 16px rgba(0,0,0,0.40), 0 0 0 0 rgba(244,211,94,0.7); }
+  50%      { box-shadow: inset 0 4px 16px rgba(0,0,0,0.40), 0 0 0 14px rgba(244,211,94,0); }
+}
+.discard .card.fx-2 { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), fx-2-pulse 0.9s ease-out 0.32s; border-radius: 9px; }
+
+/* 7 — lower-or-equal lock: green descend ripple */
+.card-fx.fx-7-stamp { color: #7ed957; font-size: 44px; }
+@keyframes fx-7-tilt {
+  0%   { transform: translateY(0) rotate(0); }
+  30%  { transform: translateY(-4px) rotate(-2deg); }
+  60%  { transform: translateY(6px) rotate(2deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+.discard .card.fx-7 { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), fx-7-tilt 0.7s ease-in-out 0.32s; }
+
+/* 8 — skip: clockwise spin (the next player gets sent past) */
+.card-fx.fx-8-stamp { color: #b48cff; font-size: 38px; letter-spacing: 1px; }
+@keyframes fx-8-spin {
+  0%   { transform: rotate(0); }
+  100% { transform: rotate(360deg); }
+}
+.discard .card.fx-8 { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), fx-8-spin 0.7s ease-in-out 0.32s; }
+
+/* Q — reverse: full 360° flip on the vertical axis */
+.card-fx.fx-Q-stamp { color: #d4862a; font-size: 80px; }
+@keyframes fx-Q-flip {
+  0%   { transform: rotateY(0); }
+  100% { transform: rotateY(360deg); }
+}
+.discard .card.fx-Q { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), fx-Q-flip 0.85s ease-in-out 0.32s; }
+
+/* K — royal: gold halo shimmer */
+.card-fx.fx-K-stamp { color: #f4d35e; font-size: 64px; }
+@keyframes fx-K-glow {
+  0%, 100% { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)) drop-shadow(0 0 0 transparent); }
+  50%      { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)) drop-shadow(0 0 18px rgba(244,211,94,0.85)); }
+}
+.discard .card.fx-K { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), fx-K-glow 0.95s ease-in-out 0.32s; }
+
+/* A — wild: rainbow sparkle */
+.card-fx.fx-A-stamp {
+  color: #fff;
+  font-size: 70px;
+  text-shadow: 0 0 18px #f4d35e, 0 0 32px #d4862a, 0 0 12px #fff;
+}
+@keyframes fx-A-sparkle {
+  0%, 100% { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)); }
+  25% { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)) drop-shadow(0 0 12px #f4d35e); }
+  50% { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)) drop-shadow(0 0 16px #ff9eaa); }
+  75% { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)) drop-shadow(0 0 14px #7ed957); }
+}
+.discard .card.fx-A { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), fx-A-sparkle 0.95s ease-in-out 0.32s; }
+
+/* Black Jack +5: dark slash */
+.card-fx.fx-Jblack-stamp { color: #c2453a; font-size: 56px; font-weight: 900; }
+@keyframes fx-Jblack-strike {
+  0%   { transform: translateX(0) rotate(0); }
+  20%  { transform: translateX(-4px) rotate(-3deg); }
+  50%  { transform: translateX(4px) rotate(3deg); }
+  80%  { transform: translateX(-2px) rotate(-1deg); }
+  100% { transform: translateX(0) rotate(0); }
+}
+.discard .card.fx-Jblack { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), fx-Jblack-strike 0.55s ease-in-out 0.32s; }
+
+/* Red Jack cancel: green tick / cross-strike */
+.card-fx.fx-Jred-stamp { color: #7ed957; font-size: 76px; font-weight: 900; }
+@keyframes fx-Jred-cancel {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.discard .card.fx-Jred { animation: card-land 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), fx-Jred-cancel 0.45s ease-out 0.32s; }
+
 @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
 .shake { animation: shake 0.35s ease; }
 
@@ -1025,41 +1127,34 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
     max-width: none;
     padding: 4px 14px;
     border-radius: 0 0 14px 14px;
-    height: 280px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 0;
   }
   .me-header { margin-bottom: 0; flex: 0 0 auto; }
-  .reserve { padding: 2px 10px; margin-bottom: 0; border-radius: 8px; flex: 0 0 auto; }
+  .reserve { padding: 2px 10px; margin: 0; border-radius: 8px; flex: 0 0 auto; }
   .reserve-label { margin-bottom: 0; }
+  /* Hand-section grows naturally as the hand wraps to multiple rows — no scroll, no clip. */
   .hand-section {
-    padding: 2px 12px;
+    padding: 2px 12px 4px;
     border-radius: 8px;
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+    flex: 0 0 auto;
   }
-  .hand-label { margin-bottom: 0; flex: 0 0 auto; }
+  .hand-label { margin-bottom: 0; }
   .hand {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: visible;
-    padding-bottom: 4px;
-    scrollbar-width: thin;
+    flex-wrap: wrap;
+    overflow: visible;
+    padding-bottom: 0;
     align-items: center;
-    flex: 1 1 auto;
-    min-height: 0;
+    min-height: var(--card-h);
   }
   #action-bar {
     grid-area: actionBar;
-    margin: 4px 0 0;
+    margin: 0;
     max-width: none;
     width: 100%;
     padding: 6px 14px;
     gap: 10px;
-    height: 56px;
     flex-shrink: 0;
   }
   .action-buttons { gap: 8px; }

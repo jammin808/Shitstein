@@ -1672,7 +1672,11 @@ function postMoveProcessing() {
   if (tags.includes('burn') || tags.includes('fourOfKind')) flashBurnOnDiscard();
   // Mark the freshly-played top card so it animates in.
   const topCard = document.querySelector('#discard .card');
-  if (topCard) { topCard.classList.add('fresh'); setTimeout(() => topCard.classList.remove('fresh'), 320); }
+  if (topCard) {
+    topCard.classList.add('fresh');
+    setTimeout(() => topCard.classList.remove('fresh'), 320);
+    playSpecialCardFX(topCard);
+  }
   maybeShowReactions();
 
   if (state.phase === 'over') { showGameOver(); return; }
@@ -1895,6 +1899,37 @@ function showReactionBubble(playerId, reaction, fromHuman) {
   target.appendChild(bubble);
   setTimeout(() => bubble.classList.add('fade'), 2600);
   setTimeout(() => { if (bubble.parentNode) bubble.remove(); }, 3100);
+}
+
+// Apply a unique animation to the just-played top card based on its rank/suit. Each special
+// card gets its own FX: a floating stamp + a card-level pulse / spin / shimmer.
+function playSpecialCardFX(topCardEl) {
+  if (!state || !state.lastPlayCards || !state.lastPlayCards.length) return;
+  const last = state.lastPlayCards[state.lastPlayCards.length - 1];
+  if (!last) return;
+  let cls = null, stamp = null;
+  if (last.rank === '2')      { cls = 'fx-2';   stamp = '+2'; }
+  else if (last.rank === '7') { cls = 'fx-7';   stamp = '≤ 7'; }
+  else if (last.rank === '8') { cls = 'fx-8';   stamp = '⏭ skip'; }
+  else if (last.rank === 'Q') { cls = 'fx-Q';   stamp = '↻'; }
+  else if (last.rank === 'K') { cls = 'fx-K';   stamp = '👑'; }
+  else if (last.rank === 'A') { cls = 'fx-A';   stamp = '★'; }
+  else if (last.rank === 'J') {
+    if (last.suit === 'S' || last.suit === 'C') { cls = 'fx-Jblack'; stamp = '+5'; }
+    else                                          { cls = 'fx-Jred';   stamp = '✖'; }
+  }
+  if (!cls) return;
+  topCardEl.classList.add(cls);
+  setTimeout(() => topCardEl.classList.remove(cls), 1100);
+  // Floating stamp over the discard
+  const discardEl = document.getElementById('discard');
+  if (discardEl && stamp) {
+    const fx = document.createElement('div');
+    fx.className = `card-fx ${cls}-stamp`;
+    fx.textContent = stamp;
+    discardEl.appendChild(fx);
+    setTimeout(() => { if (fx.parentNode) fx.remove(); }, 1100);
+  }
 }
 
 function flashBurnOnDiscard() {
