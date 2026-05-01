@@ -271,15 +271,10 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   position: relative;
   min-height: 140px;
 }
-.middle::before {
-  content: '';
-  position: absolute;
-  inset: -50px -200px;
-  background: radial-gradient(ellipse at center, rgba(255,255,255,0.10), rgba(255,255,255,0.04) 40%, transparent 70%);
-  pointer-events: none;
-  z-index: -1;
-  border-radius: 50%;
-}
+/* (Removed the ambient ::before glow that extended 50 px below .middle. With me-area's
+   semi-transparent background sitting beneath, the glow showed through and looked like
+   a hazy gap between the play panel and the me-area below. The play panel's own inset
+   shadow + gold border already give it visual weight.) */
 /* The deck and discard pile are slightly bigger than hand cards so the "shared table"
    reads as more important than your private hand. The size cascades to descendant .card
    nodes via the --card-w / --card-h custom properties. */
