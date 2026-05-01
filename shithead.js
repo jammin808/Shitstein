@@ -18,7 +18,7 @@ function isJackBlack(card) { return card.rank === 'J' && (card.suit === 'S' || c
 function isJackRed(card)   { return card.rank === 'J' && (card.suit === 'H' || card.suit === 'D'); }
 
 const CARD_INFO = {
-  '2':  '<strong>2 — Wild lead, pick up two.</strong><br>A 2 of any suit plays on <em>any</em> top card — same as a 10. The only block is when the 8 skip queue is active (the next player owes a skip and must play another 8). The next player after a 2 must pick up <strong>2 cards</strong> from the deck — unless they play a 2 (+2 more), a black Jack (+5), or a red Jack (cancels a black Jack). Stacking another 2 passes the additive total down the chain. <em>If a multi-card run starts with a 2 (or Jack) but ends on a non-chain card (e.g., 2♥ + 3♥ + 4♥), the pickup chain is cancelled and the next player just plays on the last card.</em>',
+  '2':  '<strong>2 — Wild lead, pick up two.</strong><br>A 2 of any suit plays on <em>any</em> top card — same as a 10. The only block is when the 8 skip queue is active (the next player owes a skip and must play another 8). The next player after a 2 must pick up <strong>2 cards</strong> from the deck — unless they play a 2 (+2 more), a black Jack (+5), or a red Jack (cancels a black Jack). Stacking another 2 passes the additive total down the chain. <em>In your own chain</em>: a 2 chains via same suit + numerical sequence (e.g., 2♥ → 3♥), as a same-rank pair (2 + 2 of any suit), or with a same-suit Ace (low-Ace neighbour: 2♠ ↔ A♠). For cross-suit Ace pivots, click the Ace first and call the 2\'s suit. <em>If a multi-card run starts with a 2 (or Jack) but ends on a non-chain card (e.g., 2♥ + 3♥ + 4♥), the pickup chain is cancelled and the next player just plays on the last card.</em>',
   '3':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
   '4':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
   '5':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
@@ -213,8 +213,14 @@ function higherOrEqual(card, prevCard) {
 function chainStep(card, prevCard) {
   if (card.rank === prevCard.rank) return true;
   if (card.suit !== prevCard.suit) return false;
-  const diff = RANK_VAL[card.rank] - RANK_VAL[prevCard.rank];
-  return diff === 1 || diff === -1;
+  const cv = RANK_VAL[card.rank];
+  const pv = RANK_VAL[prevCard.rank];
+  if (cv - pv === 1 || cv - pv === -1) return true;
+  // Low-Ace neighbour: an Ace (rank-value 14) and a 2 (rank-value 2) chain when same suit,
+  // because the Ace can act as the "1" below a 2. The high-Ace neighbour (A↔K) is already
+  // covered by the ±1 check above.
+  if ((cv === 14 && pv === 2) || (cv === 2 && pv === 14)) return true;
+  return false;
 }
 
 function canPlayCard(card, state) {
@@ -361,7 +367,7 @@ function advanceTurn(state) {
   }
 }
 
-function playCards(state, source, indices, aceSuit) {
+function playCards(state, source, indices, aceSuit, calledSuits) {
   const p = state.players[state.current];
   const pool = p[source];
   if (!indices.length) return { ok: false, error: 'no cards' };
@@ -384,10 +390,16 @@ function playCards(state, source, indices, aceSuit) {
       : 'must follow suit (or play a special)' };
   }
   // Multi-card plays use chain validation: each card must legally play on the previous one.
-  // This unifies same-rank stacks, K-chains, runs, and any creative mixed plays.
+  // This unifies same-rank stacks, K-chains, runs, and any creative mixed plays. When the
+  // previous card is an Ace whose called suit was named at click time, treat the Ace as if
+  // it were of the called suit so the cross-suit pivot (A♥ called ♠ → K♠ or 2♠) validates.
   if (cards.length > 1) {
     for (let i = 1; i < cards.length; i++) {
-      if (!canPlayOnCard(cards[i], cards[i - 1])) {
+      let prev = cards[i - 1];
+      if (prev.rank === 'A' && calledSuits && calledSuits[i - 1]) {
+        prev = { rank: 'A', suit: calledSuits[i - 1] };
+      }
+      if (!canPlayOnCard(cards[i], prev)) {
         return { ok: false, error: `chain broken: ${cards[i].rank}${SUIT_SYM[cards[i].suit]} can't play on ${cards[i-1].rank}${SUIT_SYM[cards[i-1].suit]}` };
       }
     }
@@ -1412,16 +1424,19 @@ function onPlayClick() {
     const indices = selected.map(s => s.idx);
     const cards   = indices.map(i => me[source][i]);
     const anyAce  = cards.some(c => c.rank === 'A');
-    // The last-played Ace's called suit (chosen at click time) drives state.aceSuit for the
-    // next player. If the chain ends on a non-Ace, the engine clears aceSuit anyway, but it
-    // still needs a valid suit string when any Ace is in the play.
+    // Per-position called suits for chain validation. The last Ace's called suit also drives
+    // state.aceSuit (the next player's suit constraint).
+    const calledSuits = {};
     let aceSuit = null;
+    selected.forEach((s, i) => {
+      if (cards[i].rank === 'A' && s.calledSuit) calledSuits[i] = s.calledSuit;
+    });
     for (let i = selected.length - 1; i >= 0; i--) {
       if (cards[i].rank === 'A') { aceSuit = selected[i].calledSuit || 'S'; break; }
     }
     selected = [];
     sendOrApplyMove(anyAce
-      ? { type: 'play', source, indices, aceSuit: aceSuit || 'S' }
+      ? { type: 'play', source, indices, aceSuit: aceSuit || 'S', calledSuits }
       : { type: 'play', source, indices });
   }
 }
@@ -1495,7 +1510,7 @@ function applyMove(move, playerId) {
     state.swapReady.add(playerId);
   } else if (state.phase === 'play' && state.current === playerId) {
     let result;
-    if      (move.type === 'play')      result = playCards(state, move.source, move.indices, move.aceSuit);
+    if      (move.type === 'play')      result = playCards(state, move.source, move.indices, move.aceSuit, move.calledSuits);
     else if (move.type === 'pickUp')    result = pickUp(state);
     else if (move.type === 'blind')     result = blindFlip(state, move.index);
     else if (move.type === 'skip')      result = skipTurn(state);
