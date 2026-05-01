@@ -18,7 +18,7 @@ function isJackBlack(card) { return card.rank === 'J' && (card.suit === 'S' || c
 function isJackRed(card)   { return card.rank === 'J' && (card.suit === 'H' || card.suit === 'D'); }
 
 const CARD_INFO = {
-  '2':  '<strong>2 — Pick up two!</strong><br>A 2 can only be played on another 2, on a black Jack, or in suit. The next player must pick up <strong>2 cards</strong> from the deck — unless they play a 2 (+2 more), a black Jack (+5), or a red Jack (cancels a black Jack). Stacking another 2 passes the additive total down the chain. <em>If a multi-card run starts with a 2 (or Jack) but ends on a non-chain card (e.g., 2♥ + 3♥ + 4♥), the pickup chain is cancelled and the next player just plays on the last card.</em>',
+  '2':  '<strong>2 — Wild lead, pick up two.</strong><br>A 2 of any suit plays on <em>any</em> top card — same as a 10. The only block is when the 8 skip queue is active (the next player owes a skip and must play another 8). The next player after a 2 must pick up <strong>2 cards</strong> from the deck — unless they play a 2 (+2 more), a black Jack (+5), or a red Jack (cancels a black Jack). Stacking another 2 passes the additive total down the chain. <em>If a multi-card run starts with a 2 (or Jack) but ends on a non-chain card (e.g., 2♥ + 3♥ + 4♥), the pickup chain is cancelled and the next player just plays on the last card.</em>',
   '3':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
   '4':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
   '5':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
@@ -235,6 +235,10 @@ function canPlayCard(card, state) {
   const top = topDiscard(state);
   // Empty pile — anything goes.
   if (!top) return true;
+  // 2 is a wild lead — plays on any top card, just like the 10. The exceptions are handled
+  // above: an active pickup chain has its own whitelist (which already includes 2), and the
+  // 8 skip queue blocks everything except another 8.
+  if (card.rank === '2') return true;
   // 7-lock: top=7 forces the next player to play 7 or lower. Any card of rank ≤ 7 (any suit)
   // plays — this overrides the normal suit/rank rule. 10 is wild (burns the pile). 8 / 9 / J /
   // Q / K / A are all blocked.
@@ -254,12 +258,7 @@ function canPlayCard(card, state) {
   const matchSuit = (top.rank === 'A' && state.aceSuit) ? state.aceSuit : top.suit;
   const matchTop = { rank: top.rank, suit: matchSuit };
 
-  // 2-card rule: a 2 plays only on another 2, on a black Jack, or in suit.
-  if (card.rank === '2') {
-    if (top.rank === '2') return true;
-    if (isJackBlack(top)) return true;
-    return card.suit === matchSuit;
-  }
+  // (2 is handled above — it's a wild lead.)
   // 8-card rule: an 8 plays only on another 8, or higher rank in the same suit (any gap).
   if (card.rank === '8') {
     if (top.rank === '8') return true;       // (handled by 8-lock above, kept for safety)
