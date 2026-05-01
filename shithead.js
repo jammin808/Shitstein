@@ -1302,14 +1302,32 @@ function renderTable() {
       discardEl.classList.add('has-fan');
       const fan = document.createElement('div');
       fan.className = 'discard-fan';
+      // Dynamic overlap: short chains spread out (20% overlap, each card shows 80%),
+      // long chains compress (up to 85% overlap, each card shows 15%). The fan also
+      // gets a measured maximum extension so it doesn't reach over the direction-of-
+      // play arrow or the deck — beyond that we fall back to the 85% overlap cap.
+      const N = chain.length;
+      const minOverlap = 0.20, maxOverlap = 0.85;
+      // Linear lerp: 0 at N=2, 1 at N=6+. Past N=6 we stay at the 85% cap.
+      const t = Math.max(0, Math.min((N - 2) / 4, 1));
+      let overlap = minOverlap + (maxOverlap - minOverlap) * t;
+      // Also cap by available leftward space inside the play panel (the gap between
+      // the discard slot's left edge and the direction-arrow's right edge — a CSS
+      // custom property so the panel can publish its actual measured value).
+      const maxExtensionPx = 80; // safe value that keeps the deck visible
+      const cardWPx = (function () {
+        const m = getComputedStyle(discardEl).getPropertyValue('--card-w').trim();
+        const v = parseFloat(m);
+        return Number.isFinite(v) && v > 0 ? v : 160;
+      })();
+      const requiredOverlap = N > 1 ? 1 - (maxExtensionPx / ((N - 1) * cardWPx)) : 0;
+      if (requiredOverlap > overlap) overlap = Math.min(maxOverlap, requiredOverlap);
+      const offsetFraction = -(1 - overlap); // negative = shifts left
       chain.forEach((c, i) => {
         const card = renderCard(c, { help: false });
         card.classList.add('fan-card');
-        // Each card slides into view in sequence, like cards being laid down. Last card
-        // ends in the slot position; earlier cards trail to the LEFT with a 20% overlap
-        // (i.e. each card shows 80% of itself).
         const offsetSteps = (chain.length - 1 - i);
-        card.style.left = `calc(var(--card-w) * -0.8 * ${offsetSteps})`;
+        card.style.left = `calc(var(--card-w) * ${offsetFraction} * ${offsetSteps})`;
         card.style.zIndex = String(i + 1);
         card.style.animationDelay = `${i * 70}ms`;
         fan.appendChild(card);
