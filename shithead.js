@@ -1951,20 +1951,55 @@ function buildAiConfig(cfg) {
   cfg.innerHTML = `
     <h3>vs Bots</h3>
     <div class="row"><label>Your name <input type="text" id="cfg-name" value="You" maxlength="16"></label></div>
-    <div class="row"><label>Bot opponents
-      <select id="cfg-bots">
-        <option value="1">1 bot (2 players)</option>
-        <option value="2" selected>2 bots (3 players)</option>
-        <option value="3">3 bots (4 players)</option>
-        <option value="4">4 bots (5 players)</option>
-      </select></label></div>
-    <button class="primary" id="cfg-start">Deal!</button>
+    <p class="muted">Add bots up to a maximum of 5 players total.</p>
+    <div id="cfg-bot-list"></div>
+    <div class="row" style="margin-top:8px;">
+      <button class="ghost" id="cfg-add-bot">+ Add bot</button>
+      <button class="primary" id="cfg-start">Deal!</button>
+    </div>
   `;
+  const botList = $('cfg-bot-list');
+  const bots = [{ name: BOT_NAMES[0] || 'Bot 1' }, { name: BOT_NAMES[1] || 'Bot 2' }];
+
+  function renderBots() {
+    botList.innerHTML = '';
+    bots.forEach((b, i) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <input type="text" value="${escapeHtml(b.name)}" data-idx="${i}" maxlength="16">
+        <span class="muted">🤖 Bot</span>
+        ${bots.length > 1 ? `<button class="ghost" data-rm="${i}">remove</button>` : ''}
+      `;
+      botList.appendChild(row);
+    });
+    botList.querySelectorAll('input[type=text]').forEach(inp => {
+      inp.addEventListener('input', () => { bots[+inp.dataset.idx].name = inp.value; });
+    });
+    botList.querySelectorAll('button[data-rm]').forEach(btn => {
+      btn.addEventListener('click', () => { bots.splice(+btn.dataset.rm, 1); renderBots(); updateAddButton(); });
+    });
+  }
+  function updateAddButton() {
+    const btn = $('cfg-add-bot');
+    if (!btn) return;
+    btn.disabled = bots.length >= 4; // +1 human = 5 total cap
+    btn.style.opacity = btn.disabled ? '0.5' : '';
+  }
+  renderBots();
+  updateAddButton();
+
+  $('cfg-add-bot').addEventListener('click', () => {
+    if (bots.length >= 4) return;
+    bots.push({ name: BOT_NAMES[bots.length] || `Bot ${bots.length + 1}` });
+    renderBots();
+    updateAddButton();
+  });
   $('cfg-start').addEventListener('click', () => {
     const myName = ($('cfg-name').value.trim() || 'You').slice(0, 16);
-    const bots   = parseInt($('cfg-bots').value, 10);
-    const names  = [myName, ...Array.from({ length: bots }, (_, i) => BOT_NAMES[i] || `Bot ${i + 1}`)];
-    const humans = [true, ...Array(bots).fill(false)];
+    if (bots.length < 1) return alert('Need at least one bot opponent.');
+    const names  = [myName, ...bots.map((b, i) => (b.name.trim() || BOT_NAMES[i] || `Bot ${i + 1}`).slice(0, 16))];
+    const humans = [true, ...Array(bots.length).fill(false)];
     startLocalGame(names, humans, 0);
   });
 }
@@ -2038,6 +2073,48 @@ function startLocalGame(names, humansArr, primaryHumanId) {
 }
 
 // =================== ONLINE MULTIPLAYER (PeerJS) ===================
+
+// PeerJS connection options. Google's public STUN helps establish WebRTC across NATs/firewalls
+// where the broker default alone fails (corporate networks, mobile carriers, etc.).
+const PEER_CONFIG = {
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' },
+    ],
+  },
+};
+
+// Build a shareable join URL for a given room code, anchored to the page that's loaded.
+function buildShareUrl(roomId) {
+  const url = new URL(location.href);
+  url.search = `?room=${encodeURIComponent(roomId)}`;
+  url.hash = '';
+  return url.toString();
+}
+
+// Heartbeat: every HEARTBEAT_INTERVAL ms each side sends a ping; if no pong arrives within
+// HEARTBEAT_TIMEOUT, the connection is considered dead and is closed so PeerJS surfaces the
+// drop via 'close'. WebRTC's own keep-alive is unreliable on some carriers.
+const HEARTBEAT_INTERVAL = 10000;
+const HEARTBEAT_TIMEOUT  = 30000;
+function attachHeartbeat(conn, label) {
+  let lastPong = Date.now();
+  let pingTimer = null;
+  let watchTimer = null;
+  const onData = (data) => { if (data && data.type === 'ping') { try { conn.send({ type: 'pong' }); } catch (_) {} } else if (data && data.type === 'pong') { lastPong = Date.now(); } };
+  conn.on('data', onData);
+  pingTimer  = setInterval(() => { try { conn.send({ type: 'ping' }); } catch (_) {} }, HEARTBEAT_INTERVAL);
+  watchTimer = setInterval(() => {
+    if (Date.now() - lastPong > HEARTBEAT_TIMEOUT) {
+      console.warn(`[heartbeat] ${label || 'peer'} silent > ${HEARTBEAT_TIMEOUT}ms — closing`);
+      try { conn.close(); } catch (_) {}
+    }
+  }, HEARTBEAT_INTERVAL);
+  conn.on('close', () => { clearInterval(pingTimer); clearInterval(watchTimer); });
+}
+
 function buildHostConfig(cfg) {
   cfg.innerHTML = `
     <h3>Host Online Game</h3>
@@ -2056,13 +2133,20 @@ function startHosting(myName) {
   $('cfg-host').disabled = true;
   $('cfg-host').textContent = 'Connecting…';
 
-  const peer = new Peer();
+  const peer = new Peer(undefined, PEER_CONFIG);
   peer.on('open', (id) => {
     showHostLobby(peer, id, myName);
   });
+  peer.on('disconnected', () => {
+    console.warn('[host] disconnected from broker — attempting reconnect');
+    try { peer.reconnect(); } catch (_) {}
+  });
   peer.on('error', (err) => {
-    alert('Network error: ' + (err.message || err.type || err));
-    console.error(err);
+    const msg = (err && (err.type === 'network' || err.type === 'server-error'))
+      ? `Couldn't reach the matchmaking broker. Check your connection and try again.\n(${err.type})`
+      : 'Network error: ' + (err.message || err.type || err);
+    alert(msg);
+    console.error('[host] peer error', err);
     $('cfg-host').disabled = false;
     $('cfg-host').textContent = 'Create Room';
   });
@@ -2070,47 +2154,69 @@ function startHosting(myName) {
 
 function showHostLobby(peer, peerId, hostName) {
   const div = $('host-room');
+  const shareUrl = buildShareUrl(peerId);
   div.classList.remove('hidden');
   div.innerHTML = `
-    <p>Share this <strong>room code</strong> with friends. They'll paste it into "Join Online":</p>
-    <div class="code-display" id="copy-id" title="Click to copy">${escapeHtml(peerId)}</div>
-    <p class="muted" style="font-size:12px;">Peer-to-peer over WebRTC. The room exists only as long as this tab stays open.</p>
+    <p>Send this <strong>invite link</strong> to friends — they click it and they're in:</p>
+    <div class="code-display" id="copy-link" title="Click to copy link">${escapeHtml(shareUrl)}</div>
+    <p class="muted" style="font-size:12px;margin-top:6px;">Or share the room code: <code id="copy-id" style="cursor:pointer" title="Click to copy code">${escapeHtml(peerId)}</code></p>
+    <p class="muted" style="font-size:12px;">Peer-to-peer over WebRTC. The room exists only as long as this tab stays open. Up to 5 players.</p>
     <h4 style="margin-top:14px;margin-bottom:6px;">Players in lobby</h4>
     <ul class="players-list" id="lobby-players"></ul>
     <button class="primary" id="start-online">Start Game</button>
+    <p class="muted" id="host-status" style="font-size:12px;margin-top:8px;">Waiting for players…</p>
   `;
-  $('copy-id').addEventListener('click', async () => {
+  const copyToClipboard = async (text, el) => {
     try {
-      await navigator.clipboard.writeText(peerId);
-      const el = $('copy-id');
+      await navigator.clipboard.writeText(text);
       const orig = el.textContent;
       el.textContent = 'Copied!';
       setTimeout(() => el.textContent = orig, 1200);
-    } catch (e) {/* fallback: just leave it */}
-  });
+    } catch (e) {/* fallback: leave it */}
+  };
+  $('copy-link').addEventListener('click', () => copyToClipboard(shareUrl, $('copy-link')));
+  $('copy-id').addEventListener('click', () => copyToClipboard(peerId, $('copy-id')));
 
   const connections = []; // { conn, name, playerId? }
 
   function refreshLobby() {
     const ul = $('lobby-players');
     if (!ul) return;
+    const total = connections.length + 1;
     let html = `<li><strong>${escapeHtml(hostName)}</strong> <span class="muted">(you, host)</span></li>`;
-    connections.forEach(c => { html += `<li>${escapeHtml(c.name)}</li>`; });
+    connections.forEach((c, i) => {
+      html += `<li><span>${escapeHtml(c.name)}</span> <button class="ghost lobby-kick" data-idx="${i}" title="Remove this player">kick</button></li>`;
+    });
     ul.innerHTML = html;
+    ul.querySelectorAll('.lobby-kick').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        const c = connections[idx];
+        if (!c) return;
+        try { c.conn.send({ type: 'reject', reason: 'You were removed by the host.' }); } catch (_) {}
+        try { c.conn.close(); } catch (_) {}
+        connections.splice(idx, 1);
+        refreshLobby();
+      });
+    });
+    const status = $('host-status');
+    if (status) status.textContent = `${total}/5 player${total === 1 ? '' : 's'} ready.${total < 2 ? ' Need at least one more to start.' : ''}`;
   }
   refreshLobby();
 
   peer.on('connection', (conn) => {
     if (state) { conn.on('open', () => { conn.send({ type: 'reject', reason: 'Game already started' }); setTimeout(() => conn.close(), 200); }); return; }
     if (connections.length >= 4) {
-      conn.on('open', () => { conn.send({ type: 'reject', reason: 'Room is full' }); setTimeout(() => conn.close(), 200); });
+      conn.on('open', () => { conn.send({ type: 'reject', reason: 'Room is full (5 players max)' }); setTimeout(() => conn.close(), 200); });
       return;
     }
     conn.on('open', () => {
+      attachHeartbeat(conn, `client(${conn.peer})`);
       conn.on('data', (data) => {
+        if (!data) return;
         if (data.type === 'hello') {
           connections.push({ conn, name: (String(data.name || 'Player')).slice(0, 16) });
-          conn.send({ type: 'welcome' });
+          try { conn.send({ type: 'welcome' }); } catch (_) {}
           refreshLobby();
         } else if (data.type === 'move' && state && data.playerId != null) {
           applyMove(data.move, data.playerId);
@@ -2119,9 +2225,17 @@ function showHostLobby(peer, peerId, hostName) {
       conn.on('close', () => {
         const idx = connections.findIndex(c => c.conn === conn);
         if (idx >= 0) {
+          const lost = connections[idx];
           connections.splice(idx, 1);
           refreshLobby();
+          if (state && lost.playerId != null) {
+            console.warn(`[host] ${lost.name} disconnected mid-game (player ${lost.playerId})`);
+            // Game keeps going — their slot is still on the table, just won't act.
+          }
         }
+      });
+      conn.on('error', (err) => {
+        console.warn('[host] connection error', err);
       });
     });
   });
@@ -2186,30 +2300,44 @@ function joinRoom(roomId, myName) {
   $('cfg-join').textContent = 'Joining…';
   $('join-status').textContent = 'Connecting to broker…';
 
-  const peer = new Peer();
+  const peer = new Peer(undefined, PEER_CONFIG);
+  let dataConn = null;
+
   peer.on('open', () => {
     $('join-status').textContent = 'Connecting to host…';
     const conn = peer.connect(roomId, { reliable: true });
-    let timeoutId = setTimeout(() => {
-      $('join-status').textContent = 'Connection timed out. Check the code and try again.';
+    dataConn = conn;
+    let connectTimeout = setTimeout(() => {
+      $('join-status').textContent = 'Connection timed out. The host may not be online — check the link and try again.';
       try { conn.close(); } catch (e) {}
       try { peer.destroy(); } catch (e) {}
       $('cfg-join').disabled = false;
       $('cfg-join').textContent = 'Join';
     }, 15000);
 
+    let welcomeTimeout = null;
+
     conn.on('open', () => {
-      clearTimeout(timeoutId);
-      $('join-status').textContent = 'Connected. Waiting for host to start…';
-      conn.send({ type: 'hello', name: myName });
+      clearTimeout(connectTimeout);
+      $('join-status').textContent = 'Connected. Saying hello…';
+      attachHeartbeat(conn, 'host');
+      try { conn.send({ type: 'hello', name: myName }); } catch (e) {
+        $('join-status').textContent = 'Could not send hello: ' + (e.message || e);
+      }
+      welcomeTimeout = setTimeout(() => {
+        $('join-status').textContent = "Connected but the host didn't acknowledge. They might still be loading — wait a moment, or refresh and try again.";
+      }, 8000);
       conn.on('data', (data) => {
+        if (!data) return;
         if (data.type === 'reject') {
+          clearTimeout(welcomeTimeout);
           alert('Rejected: ' + data.reason);
           try { peer.destroy(); } catch (e) {}
           $('cfg-join').disabled = false;
           $('cfg-join').textContent = 'Join';
         } else if (data.type === 'welcome') {
-          // wait for assign + state
+          clearTimeout(welcomeTimeout);
+          $('join-status').textContent = 'In the lobby. Waiting for the host to start the game…';
         } else if (data.type === 'assign') {
           myPlayerId = data.playerId;
         } else if (data.type === 'state') {
@@ -2222,20 +2350,42 @@ function joinRoom(roomId, myName) {
       });
     });
     conn.on('error', (e) => {
-      $('join-status').textContent = 'Error: ' + (e.message || e);
+      console.warn('[join] conn error', e);
+      $('join-status').textContent = 'Error: ' + (e.message || e.type || e);
     });
     conn.on('close', () => {
-      $('join-status').textContent = 'Disconnected from host.';
+      clearTimeout(connectTimeout);
+      clearTimeout(welcomeTimeout);
+      if (state) {
+        $('join-status').textContent = 'Lost connection to host.';
+        // Show a banner at the top of the table.
+        const banner = document.createElement('div');
+        banner.className = 'disconnect-banner';
+        banner.textContent = '⚠ Disconnected from host. Refresh the page to rejoin.';
+        document.body.appendChild(banner);
+      } else {
+        $('join-status').textContent = 'Disconnected from host before the game started.';
+        $('cfg-join').disabled = false;
+        $('cfg-join').textContent = 'Join';
+      }
     });
 
     net = {
       cleanup() { try { conn.close(); } catch (e) {} try { peer.destroy(); } catch (e) {} },
-      sendToHost(msg) { try { conn.send(msg); } catch (e) {} },
+      sendToHost(msg) { try { conn.send(msg); } catch (e) { console.warn('sendToHost failed', e); } },
       broadcastState() {},
     };
   });
+  peer.on('disconnected', () => {
+    console.warn('[join] disconnected from broker — attempting reconnect');
+    try { peer.reconnect(); } catch (_) {}
+  });
   peer.on('error', (err) => {
-    $('join-status').textContent = 'Network error: ' + (err.message || err.type || err);
+    const msg = (err && (err.type === 'peer-unavailable'))
+      ? "Couldn't find that room. The host may have closed their tab, or the code/link is wrong."
+      : 'Network error: ' + (err.message || err.type || err);
+    $('join-status').textContent = msg;
+    console.error('[join] peer error', err);
     $('cfg-join').disabled = false;
     $('cfg-join').textContent = 'Join';
   });
@@ -2350,3 +2500,25 @@ document.querySelectorAll('#emoji-picker .emoji-btn').forEach(btn => {
 });
 
 $('lobby').classList.add('active');
+
+// If the page was opened with ?room=ABC123 (a shared invite link), drop the user straight into
+// the Join Online flow with the code prefilled — they only need a name and one click.
+(function autoJoinFromUrl() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room');
+    if (!room) return;
+    showModeConfig('online-join');
+    setTimeout(() => {
+      const codeInput = $('cfg-code');
+      const nameInput = $('cfg-name');
+      if (codeInput) codeInput.value = room;
+      if (nameInput) {
+        nameInput.focus();
+        nameInput.select();
+      }
+      const cfg = $('mode-config');
+      if (cfg) cfg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  } catch (e) { console.warn('autoJoinFromUrl failed', e); }
+})();
