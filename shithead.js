@@ -1303,8 +1303,11 @@ function renderTable() {
   // ---- Face-up row ----
   const fuEl = $('me-faceUp');
   fuEl.innerHTML = '';
+  // Size the face-up cards: small while the reserve is stowed (hand still active), full size
+  // when the reserve is the active source so the player can read them clearly while choosing.
+  const fuSize = (myActive === 'faceUp') ? null : 'small';
   me.faceUp.forEach((c, i) => {
-    const card = renderCard(c);
+    const card = renderCard(c, fuSize ? { size: fuSize } : {});
     if (state.phase === 'swap') {
       card.classList.add('clickable');
       if (swapSelected.faceUp === i) card.classList.add('selected');
