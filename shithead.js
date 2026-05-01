@@ -208,47 +208,214 @@ const Sound = (() => {
     if (SFX[name]) SFX[name]();
   }
 
-  // Music: simple chiptune in A minor. 8 bars of melody + bass, ~14 s loop at 110 BPM.
-  // Notes are arrays of [Hz, beats]. The melody uses squarish blips, the bass is
-  // a softer triangle so they don't clash.
+  // ===== Music engine — multi-section chiptune in A minor =====
+  // 110 BPM. Each section is 4 bars (16 beats, ~8.7 s). Three sections rotate based on the
+  // current game intensity:
+  //   A — calm / between rounds: sparse melody, bass, kick + light hat. No snare.
+  //   B — verse / normal play:   fuller melody, walking bass, full backbeat with snare.
+  //   C — intense / chain action: 8th-note runs, harmony, 4-on-the-floor kick + 16th hat.
+  // The intensity is recomputed at every section boundary so transitions feel motivated by
+  // gameplay (the music tightens up the moment a chain starts, eases off after it clears).
   const TEMPO = 110;
   const BEAT = 60 / TEMPO;
-  const MELODY = [
-    [659, 0.5], [784, 0.5], [880, 0.5], [784, 0.5],
-    [659, 0.5], [523, 0.5], [659, 0.5], [880, 0.5],
-    [987, 0.5], [880, 0.5], [784, 0.5], [659, 0.5],
-    [587, 1.0], [659, 1.0],
-    [659, 0.5], [784, 0.5], [880, 0.5], [987, 0.5],
-    [1047, 1.0], [880, 1.0],
-    [784, 0.5], [659, 0.5], [587, 0.5], [659, 0.5],
-    [523, 1.0], [659, 1.0],
-  ];
-  const BASS = [
-    [110, 1.0], [165, 1.0], [110, 1.0], [165, 1.0],
-    [98, 1.0],  [147, 1.0], [98, 1.0],  [147, 1.0],
-    [87, 1.0],  [131, 1.0], [82, 1.0],  [123, 1.0],
-    [110, 2.0], [165, 2.0],
-  ];
+  const BEATS_PER_SECTION = 16;
 
-  function scheduleSeq(seq, type, gain, startTime) {
-    let t = startTime;
-    seq.forEach(([freq, beats]) => {
-      const dur = beats * BEAT;
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, t);
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(gain, t + 0.01);
-      g.gain.linearRampToValueAtTime(gain * 0.6, t + dur * 0.6);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur - 0.01);
-      osc.connect(g);
-      g.connect(musicGain);
-      osc.start(t);
-      osc.stop(t + dur);
+  // Pre-built 1-second white-noise buffer (re-used by all drum hits via filtered slices).
+  let _noiseBuf = null;
+  function getNoise() {
+    if (!_noiseBuf && ctx) {
+      _noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = _noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return _noiseBuf;
+  }
+  // Drum primitives: noise + filter (shaped via biquad), with optional tonal layer for the
+  // kick + snare body. All routed through the music sub-bus so the master / mute control
+  // them along with the melody.
+  function drumKick(when, gain) {
+    if (!ctx) return;
+    const t = when;
+    const tone = ctx.createOscillator();
+    tone.type = 'sine';
+    tone.frequency.setValueAtTime(130, t);
+    tone.frequency.exponentialRampToValueAtTime(45, t + 0.09);
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(gain * 0.65, t);
+    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+    tone.connect(tg); tg.connect(musicGain);
+    tone.start(t); tone.stop(t + 0.11);
+    const src = ctx.createBufferSource();
+    src.buffer = getNoise();
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'lowpass'; filt.frequency.value = 110; filt.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain * 0.30, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    src.connect(filt); filt.connect(g); g.connect(musicGain);
+    src.start(t); src.stop(t + 0.07);
+  }
+  function drumSnare(when, gain) {
+    if (!ctx) return;
+    const t = when;
+    const src = ctx.createBufferSource();
+    src.buffer = getNoise();
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'bandpass'; filt.frequency.value = 1700; filt.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain * 0.55, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+    src.connect(filt); filt.connect(g); g.connect(musicGain);
+    src.start(t); src.stop(t + 0.11);
+    const tone = ctx.createOscillator();
+    tone.type = 'triangle'; tone.frequency.setValueAtTime(220, t);
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(gain * 0.25, t);
+    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    tone.connect(tg); tg.connect(musicGain);
+    tone.start(t); tone.stop(t + 0.06);
+  }
+  function drumHat(when, gain) {
+    if (!ctx) return;
+    const t = when;
+    const src = ctx.createBufferSource();
+    src.buffer = getNoise();
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'highpass'; filt.frequency.value = 7000; filt.Q.value = 0.6;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain * 0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    src.connect(filt); filt.connect(g); g.connect(musicGain);
+    src.start(t); src.stop(t + 0.05);
+  }
+  // Tonal voice (square / triangle) — used by melody, harmony, and bass.
+  function playNote(freq, dur, type, gain, when) {
+    if (!ctx || !freq) return;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, when);
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(gain, when + 0.012);
+    g.gain.linearRampToValueAtTime(gain * 0.55, when + dur * 0.55);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur - 0.005);
+    osc.connect(g); g.connect(musicGain);
+    osc.start(when); osc.stop(when + dur);
+  }
+
+  // Section patterns. Each section is 16 beats (4 bars × 4 beats). Notes are [Hz, beats].
+  const SECTIONS = {
+    A: {
+      // Calm — sparse melody, slow bass, kick on downbeats, light hat.
+      melody: [
+        [440, 2], [523, 2], [659, 2], [523, 2],
+        [587, 2], [494, 2], [440, 4],
+      ],
+      bass: [
+        [110, 4], [110, 4], [98, 4], [82, 4],
+      ],
+      kicks:  [0, 4, 8, 12],
+      snares: [],
+      hats:   [0, 2, 4, 6, 8, 10, 12, 14],
+      melodyGain: 0.085, bassGain: 0.16, drumGain: 0.55,
+    },
+    B: {
+      // Verse — fuller melody, walking bass, backbeat snare, hat on every beat.
+      melody: [
+        [440, 1], [523, 1], [659, 1], [523, 1],
+        [587, 1], [698, 1], [659, 1], [523, 1],
+        [494, 1], [587, 1], [698, 1], [587, 1],
+        [523, 2], [440, 2],
+      ],
+      bass: [
+        [110, 2], [165, 2], [87, 2], [131, 2],
+        [98, 2], [147, 2], [82, 2], [110, 2],
+      ],
+      kicks:  [0, 4, 8, 12],
+      snares: [2, 6, 10, 14],
+      hats:   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      melodyGain: 0.10, bassGain: 0.18, drumGain: 0.85,
+    },
+    C: {
+      // Intense — 8th-note runs, harmony voice, 4-on-the-floor kick, 16th hi-hats.
+      melody: [
+        [440, 0.5], [659, 0.5], [880, 0.5], [659, 0.5],
+        [698, 0.5], [880, 0.5], [988, 0.5], [880, 0.5],
+        [880, 0.5], [988, 0.5], [1047, 0.5], [988, 0.5],
+        [880, 0.5], [698, 0.5], [659, 0.5], [523, 0.5],
+        [440, 0.5], [659, 0.5], [880, 0.5], [988, 0.5],
+        [1047, 1], [988, 1],
+        [880, 0.5], [698, 0.5], [659, 0.5], [523, 0.5],
+        [440, 2],
+      ],
+      harmony: [
+        [330, 2], [392, 2], [440, 2], [330, 2],
+        [262, 2], [330, 2], [220, 2], [262, 2],
+      ],
+      bass: [
+        [110, 1], [110, 1], [165, 1], [165, 1],
+        [87, 1], [87, 1], [131, 1], [131, 1],
+        [98, 1], [98, 1], [147, 1], [147, 1],
+        [82, 1], [110, 1], [82, 1], [110, 1],
+      ],
+      kicks:  [0, 2, 4, 6, 8, 10, 12, 14],
+      snares: [2, 6, 10, 14],
+      hats:   Array.from({ length: 32 }, (_, i) => i * 0.5),
+      melodyGain: 0.10, bassGain: 0.18, drumGain: 1.0, harmonyGain: 0.06,
+    },
+  };
+
+  function computeIntensity() {
+    if (typeof state === 'undefined' || !state || state.phase !== 'play') return 0;
+    let i = 0.32;
+    if (state.pickupChain   > 0) i = Math.max(i, 0.95);
+    if (state.pendingSkips  > 0) i = Math.max(i, 0.72);
+    const tags = state.lastEventTags || [];
+    if (tags.includes('chainAdd'))    i = Math.max(i, 0.85);
+    if (tags.includes('fourOfKind'))  i = Math.max(i, 0.65);
+    if (tags.includes('burn'))        i = Math.max(i, 0.55);
+    if ((state.discard.length || 0) > 7) i = Math.max(i, 0.50);
+    return i;
+  }
+  function pickSection(intensity) {
+    if (intensity >= 0.70) return 'C';
+    if (intensity >= 0.40) return 'B';
+    return 'A';
+  }
+  // Schedule one section starting at `startTime`. Returns the section's end time.
+  function scheduleSection(name, startTime) {
+    const sec = SECTIONS[name];
+    let t;
+    // Melody
+    t = startTime;
+    sec.melody.forEach(([f, b]) => {
+      const dur = b * BEAT;
+      if (f) playNote(f, dur, 'square', sec.melodyGain, t);
       t += dur;
     });
-    return t;
+    const sectionEnd = t;
+    // Harmony (optional second voice — only Section C)
+    if (sec.harmony) {
+      t = startTime;
+      sec.harmony.forEach(([f, b]) => {
+        const dur = b * BEAT;
+        if (f) playNote(f, dur, 'square', sec.harmonyGain, t);
+        t += dur;
+      });
+    }
+    // Bass
+    t = startTime;
+    sec.bass.forEach(([f, b]) => {
+      const dur = b * BEAT;
+      if (f) playNote(f, dur, 'triangle', sec.bassGain, t);
+      t += dur;
+    });
+    // Drums — beats are positions in 0..16 (or fractional).
+    const dg = sec.drumGain;
+    sec.kicks.forEach(beat  => drumKick (startTime + beat * BEAT, 0.40 * dg));
+    sec.snares.forEach(beat => drumSnare(startTime + beat * BEAT, 0.32 * dg));
+    sec.hats.forEach(beat   => drumHat  (startTime + beat * BEAT, 0.22 * dg));
+    return sectionEnd;
   }
   function startMusic() {
     if (!musicEnabled || muted) return;
@@ -256,16 +423,16 @@ const Sound = (() => {
     if (!ctx) return;
     resume();
     if (musicSchedTimer) return;
-    const loopOnce = () => {
+    const loop = () => {
       if (muted || !musicEnabled) { musicSchedTimer = null; return; }
+      const intensity = computeIntensity();
+      const section = pickSection(intensity);
       const start = Math.max(ctx.currentTime + 0.05, musicLoopEnd);
-      const melodyEnd = scheduleSeq(MELODY, 'square', 0.09, start);
-      scheduleSeq(BASS, 'triangle', 0.18, start);
-      musicLoopEnd = melodyEnd;
-      const loopDur = melodyEnd - ctx.currentTime;
-      musicSchedTimer = setTimeout(loopOnce, Math.max(500, (loopDur - 0.4) * 1000));
+      musicLoopEnd = scheduleSection(section, start);
+      const dur = musicLoopEnd - ctx.currentTime;
+      musicSchedTimer = setTimeout(loop, Math.max(500, (dur - 0.4) * 1000));
     };
-    loopOnce();
+    loop();
   }
   function stopMusic() {
     if (musicSchedTimer) clearTimeout(musicSchedTimer);
