@@ -217,6 +217,62 @@ const Sound = (() => {
     if (SFX[name]) SFX[name]();
   }
 
+  // ----- Human-style mouth whistle (idle-attention call) -----
+  // Synthesized with a sine carrier + 6 Hz vibrato (LFO) + bandpass-filtered breath
+  // noise underneath, with an upward pitch slide so it reads as "hey, you" rather
+  // than a flat tone. level 0..1 controls duration / intensity / number of beeps.
+  function whistleTone(when, fromHz, toHz, dur, gain) {
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const lfo = ctx.createOscillator();
+    const lfoG = ctx.createGain();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(fromHz, when);
+    osc.frequency.linearRampToValueAtTime(toHz, when + dur * 0.8);
+    osc.frequency.exponentialRampToValueAtTime(toHz * 0.96, when + dur);
+    lfo.type = 'sine';
+    lfo.frequency.value = 6;
+    lfoG.gain.value = 14;
+    lfo.connect(lfoG);
+    lfoG.connect(osc.frequency);
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(gain, when + 0.04);
+    g.gain.linearRampToValueAtTime(gain * 0.85, when + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    osc.connect(g); g.connect(sfxGain);
+    osc.start(when); lfo.start(when);
+    osc.stop(when + dur + 0.05); lfo.stop(when + dur + 0.05);
+    // Breath noise — gives it the human air-rush quality
+    const noise = ctx.createBufferSource();
+    noise.buffer = getNoise();
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.value = (fromHz + toHz) / 2;
+    filt.Q.value = 6;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0, when);
+    ng.gain.linearRampToValueAtTime(gain * 0.18, when + 0.03);
+    ng.gain.exponentialRampToValueAtTime(0.0001, when + dur * 0.7);
+    noise.connect(filt); filt.connect(ng); ng.connect(sfxGain);
+    noise.start(when); noise.stop(when + dur);
+  }
+  function whistle(level) {
+    if (muted) return;
+    if (!ctx) init();
+    resume();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if ((level || 0) >= 1) {
+      // Urgent two-note "hey-hey!" — rising in pitch and volume
+      whistleTone(t,        1700, 2100, 0.20, 0.30);
+      whistleTone(t + 0.28, 1900, 2400, 0.30, 0.36);
+    } else {
+      // Single subtle "psst" — single rising note
+      whistleTone(t, 1650, 1950, 0.26, 0.24);
+    }
+  }
+
   // ===== Music engine — multi-section chiptune in A minor =====
   // 110 BPM. Each section is 4 bars (16 beats, ~8.7 s). Three sections rotate based on the
   // current game intensity:
@@ -618,8 +674,19 @@ const Sound = (() => {
     if (musicEnabled) startMusic(); else stopMusic();
   }
 
-  return { init, resume, sfx, startMusic, stopMusic, setMuted, setMusicEnabled,
-           isMuted: () => muted, isMusicEnabled: () => musicEnabled };
+  // External code can stash an extra intensity factor (0..1) here that's added to the
+  // music engine's computeIntensity result. Used by the idle-watcher to lift the music
+  // when the player has stalled.
+  let extraIntensity = 0;
+  function setExtraIntensity(v) { extraIntensity = Math.max(0, Math.min(1, v || 0)); }
+  // Splice the boost into computeIntensity by wrapping it once.
+  const _origComputeIntensity = computeIntensity;
+  computeIntensity = function () {
+    return Math.min(1, _origComputeIntensity() + extraIntensity);
+  };
+
+  return { init, resume, sfx, whistle, startMusic, stopMusic, setMuted, setMusicEnabled,
+           setExtraIntensity, isMuted: () => muted, isMusicEnabled: () => musicEnabled };
 })();
 
 function startPlay(state) {
@@ -2185,6 +2252,7 @@ function appendActionLog(entry) {
 }
 
 function onCardClick(source, idx) {
+  Idle.bump();
   if (isSelected(source, idx)) {
     // Unified chain mode (hand AND face-up): clicking a selected card drops it
     // and every link that came after it, preserving the chain invariant.
@@ -2349,6 +2417,47 @@ function applyMove(move, playerId) {
   postMoveProcessing();
 }
 
+// ===== Idle watcher =====
+// When it becomes the human player's turn, start a 5-second timer. If they don't make
+// a move in that window, play a soft attention whistle and bump the music intensity by
+// 0.30 so the score lifts. Another 10 seconds later fire a louder two-note whistle and
+// raise the boost to 0.60. Cancel/reset on any meaningful click or when the turn passes.
+const Idle = (() => {
+  let timers = [];
+  function clear() {
+    timers.forEach(t => clearTimeout(t));
+    timers = [];
+    Sound.setExtraIntensity(0);
+  }
+  function start() {
+    clear();
+    timers.push(setTimeout(() => {
+      Sound.whistle(0);          // soft 1-note "psst"
+      Sound.setExtraIntensity(0.30);
+      timers.push(setTimeout(() => {
+        Sound.whistle(1);        // urgent 2-note "hey-hey!"
+        Sound.setExtraIntensity(0.60);
+      }, 10000));
+    }, 5000));
+  }
+  // Restart the idle timer if it's currently running (used after a card click etc. so
+  // engaged users don't get whistled at while still considering their move).
+  function bump() {
+    if (timers.length === 0) return;
+    if (state && state.phase === 'play' && state.current === myPlayerId && !pendingBotTurn) {
+      start();
+    } else {
+      clear();
+    }
+  }
+  function syncWithState() {
+    const myTurn = state && state.phase === 'play' && state.current === myPlayerId && !pendingBotTurn;
+    if (myTurn) start();
+    else clear();
+  }
+  return { start, clear, bump, syncWithState };
+})();
+
 function postMoveProcessing() {
   renderTable();
   // Visual: flash a burn over the discard if the last move triggered one.
@@ -2374,6 +2483,7 @@ function postMoveProcessing() {
     playSpecialCardFX(topCard);
   }
   maybeShowReactions();
+  Idle.syncWithState();
 
   if (state.phase === 'over') { showGameOver(); return; }
 
@@ -3464,6 +3574,7 @@ function pickEmojiLine(emoji, fallback) {
 document.querySelectorAll('#emoji-picker .emoji-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!state || state.phase !== 'play') return;
+    Idle.bump();
     const emoji = btn.dataset.emoji;
     const text  = pickEmojiLine(emoji, btn.dataset.text || '');
     showReactionBubble(myPlayerId, { emoji, text }, true);
