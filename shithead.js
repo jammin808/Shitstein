@@ -617,7 +617,11 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
   // Snapshot the played cards so the renderer can fan them out on the discard for visual
   // clarity (especially useful for multi-card chains). Burned chains snapshot the burned
   // cards so the player can still see what burned. Single-card plays just hold one card.
-  state.lastPlayCards = cards.map(c => ({ rank: c.rank, suit: c.suit }));
+  // Snapshot only the cards still on the discard (i.e. NOT burned). A 10 burns its play
+  // partners, so a chain like 9♠+10♠ ends with an empty pile and lastPlayCards = [] —
+  // no fan, no leftover 10 visible. A chain like 9♠+10♠+J♠ ends on J♠ alone (the 10 and
+  // 9 are gone with the burn), so lastPlayCards = [J♠] — single card, no fan.
+  state.lastPlayCards = survivors.map(c => ({ rank: c.rank, suit: c.suit }));
 
   const finished = checkPlayerOut(state, p);
   if (finished) tags.push('finished');
