@@ -1279,6 +1279,13 @@ function renderTable() {
   else if (state.phase === 'over')                  meHint.textContent = '';
   else if (state.current !== myPlayerId)            meHint.textContent = 'Watching…';
   else                                              meHint.textContent = '';
+  // Reserve panel: the label/hint shows ONLY when the reserve is the active play source —
+  // i.e. the player's hand & deck are both empty and they're about to play face-up or
+  // face-down. The cards themselves stay visible at all times, just unlabelled.
+  const reserveEl = document.querySelector('.reserve');
+  if (reserveEl) {
+    reserveEl.classList.toggle('reserve-active', myActive === 'faceUp' || myActive === 'faceDown');
+  }
 
   // ---- Face-down row ----
   const fdEl = $('me-faceDown');

@@ -371,7 +371,11 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   font-weight: 700;
   color: rgba(255,255,255,0.55);
   margin-bottom: 4px;
+  display: none;
 }
+/* Show the reserve label/hint only when the reserve is the player's active source — i.e.
+   their hand and the deck are both gone and they're about to play face-up or face-down. */
+.reserve.reserve-active .reserve-label { display: block; }
 .reserve-hint {
   letter-spacing: 0.4px;
   text-transform: none;
@@ -433,21 +437,27 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .play-hint:empty { display: none; }
 
-/* ======================= ACTION BAR (central, big buttons) ======================= */
+/* ======================= ACTION BAR (play buttons + emoji row) ======================= */
 .action-bar {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
   margin: 14px auto 6px;
   max-width: 940px;
-  padding: 12px 20px;
+  padding: 10px 18px;
   background: rgba(0,0,0,0.32);
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px solid rgba(255,255,255,0.08);
   box-shadow: 0 4px 16px rgba(0,0,0,0.3);
   position: relative;
+}
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .action-btn {
   font-size: 17px;
@@ -538,16 +548,16 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 /* ======================= EMOJI PICKER (human reactions) ======================= */
+/* Lives inside the action-bar now — no panel of its own. */
 .emoji-picker {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
-  margin-top: 8px;
-  padding: 4px 10px;
-  background: rgba(0,0,0,0.25);
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.06);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
 }
 .emoji-picker-label {
   font-size: 12px;
@@ -965,15 +975,16 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .reserve-label { margin-bottom: 2px; }
   .hand-section { padding: 4px 12px 6px; border-radius: 8px; }
   .hand-label { margin-bottom: 2px; }
-  .emoji-picker { margin-top: 6px; padding: 3px 8px; border-radius: 8px; }
   #action-bar  {
     grid-area: actionBar;
     margin: 0;
     max-width: none;
     width: 100%;
-    padding: 8px 16px;
+    padding: 8px 14px;
+    gap: 10px;
   }
-  .action-btn { padding: 9px 22px; }
+  .action-buttons { gap: 8px; }
+  .action-btn { padding: 9px 18px; min-width: 130px; font-size: 16px; }
 
   /* RIGHT column — action log spans the top two rows; play-hint sits in row 3 underneath */
   .action-log {
