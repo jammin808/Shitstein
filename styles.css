@@ -397,8 +397,9 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 /* Face-up cards overlay the face-down cards by 85%, giving a stacked-pile look — face-up
    on top with the back of the face-down cards peeking out at the top (15%). When the
    reserve becomes the active source, face-up cards expand to full size and the overlap
-   is removed so they sit cleanly below the face-down row. */
-.stacks-up { margin-top: -78px; position: relative; z-index: 2; }
+   is removed so they sit cleanly below the face-down row. The transition makes that
+   state-change animate smoothly. */
+.stacks-up { margin-top: -78px; position: relative; z-index: 2; transition: margin-top 0.4s cubic-bezier(0.34, 1.2, 0.64, 1); }
 .reserve.faceup-active .stacks-up { margin-top: 6px; z-index: 1; }
 
 /* The hand sits in its own elevated panel — bigger, brighter background, brighter label. The
@@ -550,15 +551,24 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: 13px;
   line-height: 1.4;
   border-left: 3px solid var(--accent);
-  animation: log-slide 0.35s ease;
+  animation: log-stream 0.45s cubic-bezier(0.34, 1.2, 0.64, 1) both;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transform-origin: right top;
 }
 .action-log .log-entry .who { font-weight: 700; color: var(--accent); }
 .action-log .log-entry .what { opacity: 0.92; }
-.action-log .log-entry.fading { opacity: 0.5; }
+.action-log .log-entry.fading { opacity: 0.5; transition: opacity 0.4s ease; }
 @keyframes log-slide {
   from { transform: translateX(20px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
+}
+/* Streamed log entries: slide in from the right while existing entries shift down to make
+   room. The expanding max-height + padding gives a smooth "growth from nothing" effect
+   instead of a hard jump. */
+@keyframes log-stream {
+  0%   { transform: translateX(36px) scale(0.92); opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: -6px; border-top-width: 0; border-bottom-width: 0; }
+  60%  { transform: translateX(0)    scale(1.02); opacity: 1; max-height: 200px; padding-top: 9px; padding-bottom: 9px; margin-bottom: 0; }
+  100% { transform: translateX(0)    scale(1);    opacity: 1; max-height: 200px; padding-top: 9px; padding-bottom: 9px; margin-bottom: 0; }
 }
 
 /* ======================= EMOJI PICKER (human reactions) ======================= */
@@ -628,6 +638,20 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 .card.selected .card-bg { stroke: var(--accent); stroke-width: 3; }
 .card.disabled         { opacity: 0.55; cursor: not-allowed; }
 .card.disabled:hover   { transform: none; }
+/* Subtle pop-in for any newly rendered card (hand refills, reserve, opponent updates).
+   Cheap enough to fire on every render — barely visible if nothing changed, gives the
+   eye a soft "new card!" cue when something does. */
+.hand .card,
+.stack-row .card,
+.opponent-stacks .card,
+.opponent-hand .card {
+  animation: card-appear 0.28s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+}
+@keyframes card-appear {
+  0%   { opacity: 0; transform: translateY(-6px) scale(0.94); }
+  70%  { opacity: 1; transform: translateY(1px)  scale(1.02); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
 
 .card-svg { width: 100%; height: 100%; display: block; border-radius: inherit; }
 .card-bg  { fill: #fdfaf2; stroke: rgba(0,0,0,0.18); stroke-width: 0.5; }
@@ -975,12 +999,13 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .opponent-stacks .card.small { --card-w: 36px; --card-h: 50px; }
   .opponent-hand .card.tiny    { --card-w: 20px; --card-h: 28px; }
 
-  /* CENTRE column — bigger cards, distinctive sunken-felt panel for the play area. Vertical
-     gap between every section is squeezed to the minimum so the column packs tight. */
+  /* CENTRE column — bigger cards, distinctive sunken-felt panel for the play area. Each
+     section has a FIXED height so the layout never reflows when the hand grows or the
+     reserve depletes. The hand row scrolls horizontally if cards exceed the column width. */
   .middle {
     grid-area: middle;
     margin: 0;
-    min-height: var(--pile-card-h);
+    height: calc(var(--pile-card-h) + 16px);
     background:
       radial-gradient(ellipse at 50% 35%, rgba(0,0,0,0.10), rgba(0,0,0,0.42) 90%),
       linear-gradient(135deg, rgba(31, 93, 58, 0.55), rgba(15, 58, 35, 0.65));
@@ -991,28 +1016,51 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
       inset 0 4px 16px rgba(0,0,0,0.40),
       inset 0 -1px 0 rgba(255,255,255,0.04),
       0 2px 14px rgba(0,0,0,0.20);
-    padding: 8px 18px 8px;
+    padding: 8px 18px;
     gap: 36px;
   }
-  .me-area     {
+  .me-area {
     grid-area: me-area;
     margin-top: 0;
     max-width: none;
-    padding: 4px 14px 4px;
+    padding: 4px 14px;
     border-radius: 0 0 14px 14px;
+    height: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
-  .me-header { margin-bottom: 0; }
-  .reserve { padding: 2px 10px 2px; margin-bottom: 2px; border-radius: 8px; }
+  .me-header { margin-bottom: 0; flex: 0 0 auto; }
+  .reserve { padding: 2px 10px; margin-bottom: 0; border-radius: 8px; flex: 0 0 auto; }
   .reserve-label { margin-bottom: 0; }
-  .hand-section { padding: 2px 12px 2px; border-radius: 8px; }
-  .hand-label { margin-bottom: 0; }
-  #action-bar  {
+  .hand-section {
+    padding: 2px 12px;
+    border-radius: 8px;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .hand-label { margin-bottom: 0; flex: 0 0 auto; }
+  .hand {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    align-items: center;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  #action-bar {
     grid-area: actionBar;
     margin: 4px 0 0;
     max-width: none;
     width: 100%;
     padding: 6px 14px;
     gap: 10px;
+    height: 56px;
+    flex-shrink: 0;
   }
   .action-buttons { gap: 8px; }
   .action-btn { padding: 9px 20px; min-width: 130px; font-size: 16px; }
