@@ -10,8 +10,10 @@
   --muted:       #888;
   --shadow:      0 4px 12px rgba(0,0,0,0.18);
   --shadow-lg:   0 12px 32px rgba(0,0,0,0.35);
-  --card-w:      88px;
-  --card-h:      124px;
+  --card-w:      80px;
+  --card-h:      112px;
+  --pile-card-w: 100px;
+  --pile-card-h: 140px;
 }
 
 * { box-sizing: border-box; }
@@ -278,9 +280,14 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   z-index: -1;
   border-radius: 50%;
 }
+/* The deck and discard pile are slightly bigger than hand cards so the "shared table"
+   reads as more important than your private hand. The size cascades to descendant .card
+   nodes via the --card-w / --card-h custom properties. */
 .deck, .discard {
-  width: var(--card-w);
-  height: var(--card-h);
+  --card-w: var(--pile-card-w);
+  --card-h: var(--pile-card-h);
+  width: var(--pile-card-w);
+  height: var(--pile-card-h);
   position: relative;
 }
 
@@ -337,15 +344,15 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ======================= ME AREA ======================= */
 .me-area {
   background: rgba(0,0,0,0.30);
-  border-radius: 16px;
-  padding: 12px 18px 16px;
-  margin-top: 12px;
+  border-radius: 14px;
+  padding: 8px 14px 12px;
+  margin-top: 10px;
   border: 1px solid rgba(255,255,255,0.06);
   position: relative;
 }
-.me-header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
-.me-label  { font-size: 16px; opacity: 0.92; font-weight: 700; }
-.me-hint   { font-size: 13px; opacity: 0.7; font-style: italic; color: rgba(255,255,255,0.75); }
+.me-header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 6px; flex-wrap: wrap; }
+.me-label  { font-size: 15px; opacity: 0.92; font-weight: 700; }
+.me-hint   { font-size: 12px; opacity: 0.7; font-style: italic; color: rgba(255,255,255,0.75); }
 
 /* The reserve = your face-down + face-up cards. Visually grouped in a darker, slightly
    recessed sub-panel to make it clear they're a *reserve* you draw on later — not the same
@@ -353,9 +360,9 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 .reserve {
   background: rgba(0,0,0,0.22);
   border: 1px dashed rgba(255,255,255,0.10);
-  border-radius: 12px;
-  padding: 8px 12px 10px;
-  margin-bottom: 12px;
+  border-radius: 10px;
+  padding: 4px 10px 6px;
+  margin-bottom: 8px;
 }
 .reserve-label {
   font-size: 11px;
@@ -363,7 +370,7 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   text-transform: uppercase;
   font-weight: 700;
   color: rgba(255,255,255,0.55);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .reserve-hint {
   letter-spacing: 0.4px;
@@ -381,8 +388,8 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 .hand-section {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 12px;
-  padding: 10px 12px 12px;
+  border-radius: 10px;
+  padding: 6px 12px 8px;
 }
 .hand-label {
   font-size: 12px;
@@ -390,11 +397,11 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   text-transform: uppercase;
   font-weight: 700;
   color: var(--accent);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .hand {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
   flex-wrap: wrap;
   min-height: var(--card-h);
@@ -409,20 +416,20 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ======================= PLAY HINT BANNER ======================= */
 /* The per-play action guide — what the player can do based on top card + state. Sits in its
-   own row above the action bar so it never collides with reaction bubbles or the discard pile. */
+   own row, centred, with type sized for at-a-glance reading. */
 .play-hint {
-  max-width: 940px;
-  margin: 16px auto 0;
-  padding: 10px 18px;
-  background: rgba(0,0,0,0.42);
-  border: 1px solid rgba(212, 134, 42, 0.35);
-  border-left: 4px solid var(--accent);
+  max-width: 820px;
+  margin: 12px auto 0;
+  padding: 10px 22px;
+  background: rgba(0,0,0,0.45);
+  border: 1px solid rgba(212, 134, 42, 0.45);
   border-radius: 12px;
-  color: rgba(255,255,255,0.92);
-  font-size: 14px;
-  line-height: 1.45;
-  min-height: 22px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+  color: rgba(255,255,255,0.95);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
 }
 .play-hint:empty { display: none; }
 
@@ -536,10 +543,10 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 12px;
-  padding: 8px 12px;
+  margin-top: 8px;
+  padding: 4px 10px;
   background: rgba(0,0,0,0.25);
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255,255,255,0.06);
 }
 .emoji-picker-label {
@@ -895,11 +902,11 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 @media (min-width: 1100px) {
   #table {
     display: grid;
-    grid-template-columns: 230px minmax(0, 1fr) 270px;
+    grid-template-columns: 220px minmax(0, 1fr) 260px;
     grid-template-rows: auto auto auto auto;
     column-gap: 14px;
-    row-gap: 10px;
-    padding: 12px;
+    row-gap: 8px;
+    padding: 10px 12px;
     align-items: start;
   }
   .opponents {
@@ -923,13 +930,17 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   }
   .opponent-name { font-size: 14px; }
   .opponent-counts { font-size: 12px; }
-  .opponent-stacks { min-height: 48px; }
+  .opponent-stacks { min-height: 46px; }
   .opponent-stacks .card.small { --card-w: 32px; --card-h: 46px; }
   .opponent-hand .card.tiny    { --card-w: 18px; --card-h: 26px; }
-  .middle      { grid-column: 2; grid-row: 1; margin: 6px 0 4px; }
-  .play-hint   { grid-column: 2; grid-row: 2; margin: 0; max-width: none; }
-  #action-bar  { grid-column: 2; grid-row: 3; margin: 0; max-width: none; }
-  .me-area     { grid-column: 2; grid-row: 4; margin-top: 4px; max-width: none; }
+
+  /* Centre column rows. The middle row + play-hint sit at top, then me-area, then the
+     play buttons row at the very bottom — directly under the emoji chat strip. */
+  .middle      { grid-column: 2; grid-row: 1; margin: 4px 0 4px; min-height: var(--pile-card-h); }
+  .play-hint   { grid-column: 2; grid-row: 2; margin: 0 auto; max-width: 720px; width: 100%; }
+  .me-area     { grid-column: 2; grid-row: 3; margin-top: 0; max-width: none; }
+  #action-bar  { grid-column: 2; grid-row: 4; margin: 0 auto; max-width: 720px; width: 100%; padding: 10px 16px; }
+
   .action-log {
     grid-column: 3;
     grid-row: 1 / -1;
@@ -940,14 +951,11 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
     max-height: calc(100vh - 90px);
     margin: 0;
   }
-  /* Tightening when constrained to the centre column */
-  .me-area { padding: 10px 14px 14px; }
-  .reserve { padding: 6px 12px 8px; margin-bottom: 8px; }
-  .hand-section { padding: 8px 12px 10px; }
-  .reserve-label, .hand-label { margin-bottom: 4px; }
-  .me-header { margin-bottom: 6px; }
-  .emoji-picker { margin-top: 8px; padding: 6px 10px; }
-  .emoji-btn { width: 32px; height: 32px; font-size: 16px; }
+  /* Compact emoji buttons on desktop so the row fits in the centre column at lower widths. */
+  .emoji-btn { width: 30px; height: 30px; font-size: 15px; }
+  /* The right-rail action log already shows the play recap, so the inline event-log inside
+     the action-bar would just duplicate it and push the buttons off-centre. Hide it. */
+  .event-log { display: none; }
 }
 
 /* ---- Tablet (iPad portrait/landscape, smaller laptops) ---- */
