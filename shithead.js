@@ -12,7 +12,7 @@ const SUIT_SYM = { S:'♠', H:'♥', D:'♦', C:'♣' };
 const RANK_VAL = { '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13,'A':14 };
 
 // Specials override the follow-suit rule and trigger their own effects.
-const SPECIALS = new Set(['2', '8', '9', '10', 'Q', 'K', 'A']);
+const SPECIALS = new Set(['2', '7', '8', '10', 'Q', 'K', 'A']);
 function isSpecial(rank) { return SPECIALS.has(rank); }
 function isJackBlack(card) { return card.rank === 'J' && (card.suit === 'S' || card.suit === 'C'); }
 function isJackRed(card)   { return card.rank === 'J' && (card.suit === 'H' || card.suit === 'D'); }
@@ -23,9 +23,9 @@ const CARD_INFO = {
   '4':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
   '5':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
   '6':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
-  '7':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
+  '7':  '<strong>7 — Lower-or-equal lock.</strong><br>A 7 plays per the normal rule (higher same suit, equal rank, or per chain rules — it is NOT wild). When a 7 is on top, the next player must play <strong>7 or lower</strong> (any card 2–7 of any suit — the suit/rank rule is overridden) or a 10 (wild, burns the pile). 8 / 9 / J / Q / K / A are blocked.',
   '8':  '<strong>8 — Skip stack.</strong><br>An 8 can only be played on another 8, or on a lower rank in the same suit. <strong>Each 8 played stacks one skip in the queue</strong> — play two 8s, the next two players miss their go. While the skip queue is alive, only another 8 plays. Once the queue drains, the 8 on top becomes a normal card and the following player plays per the usual rules. With wraparound, the original 8-player can get another go.',
-  '9':  '<strong>9 — Lower-or-equal lock.</strong><br>A 9 can only be played on another 9 or in suit. <strong>It cannot be played on a 2 or an 8.</strong> When a 9 is on top, the next player must play <strong>equal or lower than 9</strong> (any card 2–9 of any suit — the suit/rank rule is overridden) or a 10 (wild, burns the pile). J / Q / K / A are blocked.',
+  '9':  'Standard card. Plays on a higher rank in the same suit, or the same rank in any suit. In a multi-card play, each card must chain to the previous via either the same rank, OR the next rank up or down in the same suit (a strict run — no jumps).',
   '10': '<strong>10 — Burn!</strong><br>A 10 of any suit can be played on <em>anything</em> to clear the pack — including breaking out of a pickup chain. (Still rejected while skips from an 8 are queued.) <em>In a chain, however, a 10 must be in numerical sequence</em> like any other card — a 10 isn\'t wild as a chain link.',
   'J':  '<strong>Jack.</strong><br>A Jack can only be played on another Jack, or on a lower rank in the same suit. <strong>Black Jacks</strong> (♠ ♣) add <strong>+5</strong> to a pickup chain. <strong>Red Jacks</strong> (♥ ♦) cancel the most recent black Jack and its 5 cards.',
   'Q':  '<strong>Q — Reverse &amp; lock.</strong><br>A Queen can <em>only</em> be played on another Queen or in suit. Flips the direction of play (with two players, the same player goes again). Once a Q is on top, it can only be followed by another Queen, a higher rank in the Q\'s suit, a 2, a 10, or an Ace.',
@@ -150,12 +150,12 @@ function canPlayOnCard(card, prevCard) {
   // ---- Top-card locks / extensions (apply before card-specific rules) ----
   // 8-lock: only an 8 follows an 8.
   if (prevCard.rank === '8') return card.rank === '8';
-  // 9-lock: blocks J/Q/K/A on the chain link too (10 is wild). Cards ≤ 9 fall through to the
-  // normal chain-step / card-specific rules so e.g. a same-suit run continues correctly.
-  if (prevCard.rank === '9') {
+  // 7-lock: when a 7 sits at the head of the chain link, only ranks ≤ 7 (which still must
+  // satisfy chainStep) or a 10 (wild burn) may follow. 8 / 9 / J / Q / K / A are blocked.
+  if (prevCard.rank === '7') {
     if (card.rank === '10') return true;
-    if (RANK_VAL[card.rank] > 9) return false;
-    // fall through.
+    if (RANK_VAL[card.rank] > 7) return false;
+    // fall through to chainStep / card-specific rules for ≤ 7.
   }
   // Q-lock: a Q in a chain accepts another Q (pair), a 2 (chain-cancel), or higher-same-suit
   // (which under chainStep means a same-suit K — A would also be ±1 same-suit but is gated by
@@ -194,11 +194,6 @@ function canPlayOnCard(card, prevCard) {
     if (prevCard.rank === 'J') return true;
     return chainStep(card, prevCard);
   }
-  if (card.rank === '9') {
-    if (prevCard.rank === '2' || prevCard.rank === '8') return false;
-    return chainStep(card, prevCard);
-  }
-
   // Aces and 10s as chain links are handled at the top — they never wild-shortcut a chain.
 
   // Normal chain link: strictly consecutive same-suit run (up or down by 1) or equal rank any suit.
@@ -240,12 +235,12 @@ function canPlayCard(card, state) {
   const top = topDiscard(state);
   // Empty pile — anything goes.
   if (!top) return true;
-  // 9-lock: top=9 forces the next player to play EQUAL or LOWER than 9. Any card of rank ≤ 9
-  // (any suit) plays — this overrides the normal suit/rank rule. 10 is wild (burns). J, Q, K,
-  // A are all blocked.
-  if (top.rank === '9') {
+  // 7-lock: top=7 forces the next player to play 7 or lower. Any card of rank ≤ 7 (any suit)
+  // plays — this overrides the normal suit/rank rule. 10 is wild (burns the pile). 8 / 9 / J /
+  // Q / K / A are all blocked.
+  if (top.rank === '7') {
     if (card.rank === '10') return true;
-    if (RANK_VAL[card.rank] > 9) return false;
+    if (RANK_VAL[card.rank] > 7) return false;
     return true;
   }
   // K-lock: top=K can be followed by another K, an Ace (any suit), a 10 (any suit — 10 is wild
@@ -289,13 +284,6 @@ function canPlayCard(card, state) {
     if (top.rank === 'J') return true;
     return higherOrEqual(card, matchTop);
   }
-  // 9-card rule: a 9 plays on another 9 or in suit. Cannot play on a 2 or 8.
-  if (card.rank === '9') {
-    if (top.rank === '2' || top.rank === '8') return false;
-    if (top.rank === '9') return true;
-    return card.suit === matchSuit;
-  }
-
   // Q-lock (top is Q) — applies to remaining cards (10, A, 3-7, 9).
   if (top.rank === 'Q') {
     if (card.rank === '10' || card.rank === 'A') return true;
@@ -303,7 +291,7 @@ function canPlayCard(card, state) {
   }
 
   // 10 and Ace remain wild — except when they fall foul of the chain (handled at the top)
-  // or the 8-lock / 9-lock / Q-lock (handled above).
+  // or the 7-lock / 8-lock / Q-lock (handled above).
   if (card.rank === '10' || card.rank === 'A') return true;
 
   // Top is an Ace with a named suit — follow the named suit (any rank).

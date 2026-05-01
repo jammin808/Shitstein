@@ -26,8 +26,8 @@ Plus a few house rules (see below).
 | Card | Effect |
 |------|--------|
 | **2** | Pickup chain +2. Plays on another 2, on a black Jack, or in suit. |
+| **7** | Lower-or-equal lock. Plays per the normal rule (not wild). When a 7 is on top, the next player must play rank ≤ 7 or a 10. |
 | **8** | Skip stack. Each 8 queues one skip. While the queue is alive, only another 8 plays. |
-| **9** | Lower-or-equal lock. Plays on another 9 or in suit (and not on a 2 or 8). When a 9 is on top, the next player must play rank ≤ 9 or a 10. |
 | **10** | Burn / wild lead. Single-card 10 plays on anything (incl. a pickup chain) and clears the pile. As a chain link a 10 must follow numerical sequence. |
 | **J** | Plays on another Jack or in suit. Black Jacks (♠ ♣) add +5 to the pickup chain; red Jacks (♥ ♦) cancel a black Jack. |
 | **Q** | Reverse + lock. Plays on another Q or in suit. Once on top, only Q / 2 / 10 / A / higher-same-suit may follow. |
@@ -43,7 +43,7 @@ Plus a few house rules (see below).
 - **Pickup-chain run-out**: if a multi-card play mixes chain cards (2 / Jacks) with a run and ends on a non-chain card, the pickup chain is cancelled — the next player just plays on the last card.
 - **Hand-and-deck-empty rule**: face-up cards are locked until both your hand and the deck are empty. Then face-up. Then face-down (blind, one at a time).
 
-Common Shithead variants that are **not** in play: 7 = lower-than, 8 = invisible, 3 = mirror.
+Common Shithead variants that are **not** in play: 8 = invisible, 3 = mirror. (Shitstein uses 7 as a lower-or-equal lock — see the table above.)
 
 ## Tech
 
