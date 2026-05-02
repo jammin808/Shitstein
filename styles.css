@@ -285,6 +285,26 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   height: var(--pile-card-h);
   position: relative;
 }
+/* The deck slot animates its width / opacity / translation rather than display:none
+   so we get a smooth slide-out when the last deck card is drawn. */
+.deck {
+  transition:
+    opacity 0.45s cubic-bezier(0.34, 1.2, 0.64, 1),
+    transform 0.45s cubic-bezier(0.34, 1.2, 0.64, 1),
+    width 0.45s cubic-bezier(0.34, 1.2, 0.64, 1),
+    margin-right 0.45s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+.middle.deck-empty .deck {
+  opacity: 0;
+  transform: translateX(-32px) scale(0.92);
+  width: 0;
+  /* Eat the .middle flex `gap: 32px` between the (now-collapsed) deck and the arrow,
+     so the arrow naturally slides into the slot the deck used to occupy and the
+     discard gets the freed horizontal room for chain fans. */
+  margin-right: -32px;
+  pointer-events: none;
+  overflow: hidden;
+}
 
 /* When the most recent play was a chain, the discard slot fans the cards out to the LEFT
    so the player can read each one. The newest card stays at the slot's nominal position

@@ -981,13 +981,21 @@ function chainStep(card, prevCard) {
 }
 
 function canPlayCard(card, state) {
-  // House rule: a Jack on top blocks both 8 and Ace, regardless of pickup-chain or
-  // any other state. All OTHER rules for 8 and Ace still apply on every other top
-  // card (8 plays on 2-chain via the chain-cancel path, Ace remains wild on
-  // non-Jack tops, etc.). This is checked first so it wins over the chain/skip
-  // allowances below.
-  const _topJ = topDiscard(state);
-  if (_topJ && _topJ.rank === 'J' && (card.rank === '8' || card.rank === 'A')) return false;
+  // ---- House rules: top-of-pile blocks for 8 and Ace ----
+  // Checked before anything else so they win over chain/skip allowances below.
+  // 8: cannot follow a Jack of any colour. (8 still cancels a 2-chain on 2-top etc.)
+  // Ace: cannot follow a 2 (always), cannot follow a Black Jack while the deck
+  //      still has cards, but CAN follow a Red Jack (always) and CAN follow a
+  //      Black Jack once the deck is empty (the "no-more-pickups" relaxation).
+  //      All of Ace's normal wild behaviour on every other top card stays.
+  const _top0 = topDiscard(state);
+  if (_top0) {
+    if (card.rank === '8' && _top0.rank === 'J') return false;
+    if (card.rank === 'A') {
+      if (_top0.rank === '2') return false;
+      if (isJackBlack(_top0) && state.deck.length > 0) return false;
+    }
+  }
 
   // Pickup chain: 2 / black-J / red-J-cancel extend or counter the chain. A 10 is universally
   // wild and clears the pack — including the chain.
@@ -2078,7 +2086,12 @@ function renderTable() {
   }
 
   // ---- Deck ----
+  // When the deck runs dry we hide the deck slot and shift the play area to the left
+  // (CSS handles the slide animation via .middle.deck-empty). The discard fan's max
+  // extension also widens — see the discard render below.
   const deckEl = $('deck');
+  const middleEl = deckEl.parentElement;
+  if (middleEl) middleEl.classList.toggle('deck-empty', state.deck.length === 0);
   deckEl.innerHTML = '';
   if (state.deck.length > 0) {
     deckEl.appendChild(renderCard(null, { back: true }));
@@ -2086,12 +2099,9 @@ function renderTable() {
     lbl.className = 'pile-count';
     lbl.textContent = `${state.deck.length} left`;
     deckEl.appendChild(lbl);
-  } else {
-    const e = document.createElement('div');
-    e.className = 'empty-slot';
-    e.textContent = 'deck';
-    deckEl.appendChild(e);
   }
+  // (When deck.length === 0 we leave the slot empty — the CSS .deck-empty rule
+  // collapses and slides it out of view, so no "deck" placeholder is rendered.)
 
   // ---- Discard ----
   // Gate the rebuild on a play-key so re-renders for the SAME play (clicks, sort changes,
@@ -2124,9 +2134,9 @@ function renderTable() {
       const t = Math.max(0, Math.min((N - 2) / 4, 1));
       let overlap = minOverlap + (maxOverlap - minOverlap) * t;
       // Also cap by available leftward space inside the play panel (the gap between
-      // the discard slot's left edge and the direction-arrow's right edge — a CSS
-      // custom property so the panel can publish its actual measured value).
-      const maxExtensionPx = 80; // safe value that keeps the deck visible
+      // the discard slot's left edge and the direction-arrow's right edge). Once the
+      // deck is gone its slot is hidden, freeing ~160 px more, so the fan can spread.
+      const maxExtensionPx = (state.deck.length === 0) ? 240 : 80;
       const cardWPx = (function () {
         const m = getComputedStyle(discardEl).getPropertyValue('--card-w').trim();
         const v = parseFloat(m);
