@@ -2098,14 +2098,30 @@ function captureFlyData(sel) {
   if (!items.length) return null;
   return { items, discardRect };
 }
+// Reveal any .no-entrance / visibility:hidden discard cards. Used both as the per-fly
+// landing reveal and as a belt-and-suspenders sweep after the last fly completes (or
+// any time a stale fly state is detected) so a card can never be left invisible.
+function _revealAllNoEntranceDiscardCards() {
+  const discardEl = $('discard');
+  if (!discardEl) return;
+  discardEl.querySelectorAll('.card.no-entrance').forEach(el => {
+    el.classList.remove('no-entrance');
+    if (el.style.visibility === 'hidden') el.style.visibility = '';
+  });
+}
 function triggerFlyIfPending() {
-  if (!_pendingFlyAnim) return;
+  // Always clear the pending state immediately — if we bail without flying, the next
+  // render will see a clean slate and won't accidentally hide cards.
+  if (!_pendingFlyAnim) {
+    _revealAllNoEntranceDiscardCards();
+    return;
+  }
   const { items } = _pendingFlyAnim;
   _pendingFlyAnim = null;
   const discardEl = $('discard');
-  if (!discardEl) return;
+  if (!discardEl) { _revealAllNoEntranceDiscardCards(); return; }
   const targets = Array.from(discardEl.querySelectorAll('.card.no-entrance'));
-  if (!targets.length) return;
+  if (!targets.length) { _revealAllNoEntranceDiscardCards(); return; }
   const STAGGER = 90;
   const FLIGHT  = 380;
   items.forEach((item, i) => {
@@ -2148,8 +2164,12 @@ function triggerFlyIfPending() {
     }
     setTimeout(() => {
       target.classList.remove('no-entrance');
-      target.style.visibility = '';
+      if (target.style.visibility === 'hidden') target.style.visibility = '';
       try { fly.remove(); } catch (_) {}
+      // After the LAST fly's reveal, sweep any remaining .no-entrance cards. Covers
+      // the rare case where targets.length > items.length (e.g. items got dropped
+      // by captureFlyData) so a card can never be left invisible on the discard.
+      if (i === items.length - 1) _revealAllNoEntranceDiscardCards();
     }, startDelay + FLIGHT);
   });
 }
@@ -2273,7 +2293,12 @@ function renderTable() {
       const requiredOverlap = N > 1 ? 1 - (maxExtensionPx / ((N - 1) * cardWPx)) : 0;
       if (requiredOverlap > overlap) overlap = Math.min(maxOverlap, requiredOverlap);
       const offsetFraction = -(1 - overlap); // negative = shifts left
-      const flying = !!_pendingFlyAnim;
+      // Only suppress the entrance if this render is for THIS player's just-played
+      // cards. Without the lastEventPlayer check a stale _pendingFlyAnim (e.g. left
+      // over from a play whose fly never triggered) would silently hide every
+      // subsequent bot's discard cards — gameplay continues in state but the cards
+      // never become visible. See triggerFlyIfPending for the matching reveal sweep.
+      const flying = !!_pendingFlyAnim && state.lastEventPlayer === myPlayerId;
       chain.forEach((c, i) => {
         const card = renderCard(c, { help: false });
         card.classList.add('fan-card');
@@ -2295,7 +2320,12 @@ function renderTable() {
     } else {
       discardEl.classList.remove('has-fan');
       const topCardEl = renderCard(top);
-      const flying = !!_pendingFlyAnim;
+      // Only suppress the entrance if this render is for THIS player's just-played
+      // cards. Without the lastEventPlayer check a stale _pendingFlyAnim (e.g. left
+      // over from a play whose fly never triggered) would silently hide every
+      // subsequent bot's discard cards — gameplay continues in state but the cards
+      // never become visible. See triggerFlyIfPending for the matching reveal sweep.
+      const flying = !!_pendingFlyAnim && state.lastEventPlayer === myPlayerId;
       if (flying) {
         // Same suppression for single-card plays. The fly overlay will reveal it.
         topCardEl.classList.add('no-entrance');
