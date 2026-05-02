@@ -1992,15 +1992,53 @@ function renderCardSVG(card) {
 
 function renderCardBackSVG() {
   if (_cardBackSVGCache) return _cardBackSVGCache;
+  // Self-contained: defines its own pattern so we don't depend on injectSVGDefsOnce()
+  // for back rendering. Deep oxblood ground, calm diamond lattice (reads as texture
+  // when 5 are seen across an opponent's hand), thin gold double-rule, centered
+  // gold-on-burgundy diamond medallion with a small fleur ornament.
   _cardBackSVGCache = `<svg class="card-svg card-back-svg" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet">
-    <rect x="1" y="1" width="98" height="138" rx="9" ry="9" fill="#7a1d1d"/>
-    <rect x="4" y="4" width="92" height="132" rx="7" ry="7" fill="url(#back-weave)"/>
-    <rect x="9" y="9" width="82" height="122" rx="5" ry="5" fill="none" stroke="#f1d9a4" stroke-width="0.8"/>
-    <rect x="11" y="11" width="78" height="118" rx="4" ry="4" fill="none" stroke="#f1d9a4" stroke-width="0.4"/>
-    <g transform="translate(50 70)" fill="#f1d9a4" font-family="Georgia, serif" font-weight="700">
-      <circle r="22" fill="none" stroke="#f1d9a4" stroke-width="0.8"/>
-      <circle r="18" fill="#5a1414"/>
-      <text y="6" text-anchor="middle" font-size="16" letter-spacing="-1">SH</text>
+    <defs>
+      <linearGradient id="cb-ground" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#7a1f22"/>
+        <stop offset="1" stop-color="#561315"/>
+      </linearGradient>
+      <linearGradient id="cb-gold" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f1d68a"/>
+        <stop offset="0.55" stop-color="#caa052"/>
+        <stop offset="1" stop-color="#8a6420"/>
+      </linearGradient>
+      <pattern id="cb-lattice" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)">
+        <rect width="10" height="10" fill="url(#cb-ground)"/>
+        <path d="M0 5 L10 5 M5 0 L5 10" stroke="#3a0d10" stroke-width="0.5" opacity="0.55"/>
+        <circle cx="5" cy="5" r="0.7" fill="#caa052" opacity="0.35"/>
+      </pattern>
+    </defs>
+    <!-- Card chrome (kept identical to faces for visual continuity) -->
+    <rect x="1" y="1" width="98" height="138" rx="9" ry="9" fill="url(#cb-ground)"/>
+    <!-- Textured field, inset so the chrome edge stays clean -->
+    <rect x="4" y="4" width="92" height="132" rx="7" ry="7" fill="url(#cb-lattice)"/>
+    <!-- Double gold rule: confident outer, hairline inner -->
+    <rect x="8" y="8" width="84" height="124" rx="5" ry="5" fill="none" stroke="url(#cb-gold)" stroke-width="0.9"/>
+    <rect x="10.5" y="10.5" width="79" height="119" rx="3.6" ry="3.6" fill="none" stroke="#caa052" stroke-width="0.35" opacity="0.7"/>
+    <!-- Corner pips: tiny gold diamonds in each corner for restraint + craft -->
+    <g fill="url(#cb-gold)">
+      <path d="M16 16 L19 19 L16 22 L13 19 Z" opacity="0.85"/>
+      <path d="M84 16 L87 19 L84 22 L81 19 Z" opacity="0.85"/>
+      <path d="M16 124 L19 121 L16 118 L13 121 Z" opacity="0.85"/>
+      <path d="M84 124 L87 121 L84 118 L81 121 Z" opacity="0.85"/>
+    </g>
+    <!-- Centered medallion -->
+    <g transform="translate(50 70)">
+      <!-- Outer diamond, gold rule -->
+      <path d="M0 -28 L24 0 L0 28 L-24 0 Z" fill="#5a1316" stroke="url(#cb-gold)" stroke-width="0.9"/>
+      <!-- Inner diamond, hairline -->
+      <path d="M0 -22 L19 0 L0 22 L-19 0 Z" fill="none" stroke="#caa052" stroke-width="0.4" opacity="0.8"/>
+      <!-- Stylized fleur-ish ornament: cleaner than letterforms, holds at small scale -->
+      <g fill="url(#cb-gold)">
+        <path d="M0 -14 C -3 -8, -7 -6, -7 -2 C -7 2, -3 4, 0 4 C 3 4, 7 2, 7 -2 C 7 -6, 3 -8, 0 -14 Z"/>
+        <path d="M0 4 L-2 12 L2 12 Z"/>
+        <circle cx="0" cy="-2" r="1.4" fill="#5a1316"/>
+      </g>
     </g>
   </svg>`;
   return _cardBackSVGCache;

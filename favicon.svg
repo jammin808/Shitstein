@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true">
+  <!-- Card silhouette: cream on emerald -->
+  <rect x="2" y="2" width="60" height="60" rx="10" ry="10" fill="#0f3a23"/>
+  <rect x="9" y="7" width="46" height="50" rx="6" ry="6" fill="#fdf6e3"/>
+  <!-- Inner gold rule for a luxe feel; thin but present at 16px -->
+  <rect x="11.5" y="9.5" width="41" height="45" rx="4.2" ry="4.2" fill="none" stroke="#d4a24a" stroke-width="1.2"/>
+  <!-- Bold central spade -->
+  <path d="M32 17
+           C 22 27, 17 34, 22 40
+           C 25 43, 30 42, 32 38
+           C 34 42, 39 43, 42 40
+           C 47 34, 42 27, 32 17 Z
+           M30 41 L28 49 L36 49 L34 41 Z"
+        fill="#1d1d1d"/>
+</svg>

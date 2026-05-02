@@ -1,9 +1,9 @@
 :root {
   --felt:        #1f5d3a;
-  --felt-deep:   #0f3a23;
+  --felt-deep:   #0d3220;
   --cream:       #fdf6e3;
   --ink:         #2b2b2b;
-  --accent:      #d4862a;
+  --accent:      #d4a24a;
   --warning:     #c2453a;
   --primary:     #285c83;
   --primary-h:   #356c95;
@@ -122,6 +122,10 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 .screen.active { display: block; }
 
 /* ======================= LOBBY ======================= */
+/* The lobby card sits on the felt as a cream "menu card". A thin gold inner rule
+   ties it to the brand wordmark; the heading echoes the brand typography (Georgia
+   serif + cream→gold gradient) so the welcome screen reads as part of the same
+   identity rather than a generic form. */
 .lobby-card {
   max-width: 760px;
   margin: 32px auto;
@@ -130,10 +134,43 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 32px;
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
+  position: relative;
+  border: 1px solid rgba(212, 162, 74, 0.35);
 }
-.lobby-card h2 { margin-top: 0; }
+.lobby-card::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(212, 162, 74, 0.22);
+  pointer-events: none;
+}
+.lobby-card h2 {
+  margin-top: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  background: linear-gradient(180deg, #1c4a30 0%, #0d3220 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.lobby-card > p.muted {
+  font-size: 14.5px;
+  font-style: italic;
+  color: #6b6253;
+  margin-top: -2px;
+}
 .muted { color: var(--muted); }
-.footnote { font-size: 12px; color: var(--muted); margin-top: 24px; }
+.footnote {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  letter-spacing: 0.2px;
+}
 
 .mode-grid {
   display: grid;
@@ -142,7 +179,7 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   margin-top: 24px;
 }
 .mode-btn {
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #fbf5e6 100%);
   border: 2px solid #e6deca;
   border-radius: 12px;
   padding: 18px;
@@ -151,7 +188,12 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   cursor: pointer;
   font-weight: 500;
 }
-.mode-btn:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+.mode-btn:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(13, 50, 32, 0.18);
+  background: linear-gradient(180deg, #ffffff 0%, #fff5d8 100%);
+}
 .mode-btn:hover .mode-icon svg { color: var(--accent); transform: scale(1.08); }
 .mode-icon { font-size: 28px; height: 48px; display: flex; align-items: center; }
 .mode-icon svg {
@@ -163,8 +205,21 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 .mode-title { font-weight: 700; font-size: 17px; margin: 8px 0 4px; }
 .mode-desc { color: var(--muted); font-size: 13px; font-weight: 400; }
 
-.mode-config { margin-top: 22px; padding: 20px; background: #f6efd9; border-radius: 12px; color: var(--ink); }
-.mode-config h3 { margin-top: 0; color: var(--felt-deep); }
+.mode-config {
+  margin-top: 22px;
+  padding: 20px;
+  background: #f6efd9;
+  border-radius: 12px;
+  color: var(--ink);
+  border: 1px solid rgba(212, 162, 74, 0.30);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+}
+.mode-config h3 {
+  margin-top: 0;
+  color: var(--felt-deep);
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0.3px;
+}
 .mode-config.hidden { display: none; }
 .mode-config label { display: block; margin: 8px 0; font-weight: 500; }
 .mode-config input[type=text],
@@ -250,7 +305,7 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   transition: border-color 0.2s, box-shadow 0.2s;
   position: relative;
 }
-.opponent.active   { border-color: var(--accent); box-shadow: 0 0 18px rgba(212,134,42,0.5); animation: active-glow 1.6s ease-in-out infinite; }
+.opponent.active   { border-color: var(--accent); box-shadow: 0 0 18px rgba(212,162,74,0.5); animation: active-glow 1.6s ease-in-out infinite; }
 @keyframes active-glow {
   0%, 100% { box-shadow: 0 0 12px rgba(212,134,42,0.4); }
   50%      { box-shadow: 0 0 26px rgba(212,134,42,0.85); }
@@ -704,7 +759,7 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .card.clickable        { cursor: pointer; }
 .card.clickable:hover  { transform: translateY(-4px); filter: drop-shadow(0 8px 14px rgba(0,0,0,0.50)); }
-.card.selected         { transform: translateY(-12px); filter: drop-shadow(0 10px 18px rgba(212,134,42,0.7)); }
+.card.selected         { transform: translateY(-12px); filter: drop-shadow(0 10px 18px rgba(212,162,74,0.7)); }
 .card.selected .card-bg { stroke: var(--accent); stroke-width: 3; }
 .card.disabled         { opacity: 0.55; cursor: not-allowed; }
 .card.disabled:hover   { transform: none; }

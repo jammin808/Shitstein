@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Shitstein — A Hybrid Card Game</title>
+  <title>Shitstein — Shithead × Blackjack, dealt with style</title>
+  <meta name="description" content="Shitstein is a hybrid card game that fuses Shithead with UK Blackjack. Pub-night chaos, agency-grade table. Play against bots in your browser.">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,13 +13,32 @@
   <header class="topbar">
     <h1 class="brand">
       <svg class="brand-mark" viewBox="0 0 64 48" aria-hidden="true">
-        <g transform="translate(8 6)">
-          <rect x="0"  y="6"  width="20" height="32" rx="3" ry="3" fill="#fdfaf2" transform="rotate(-14 10 22)"/>
-          <rect x="14" y="3"  width="20" height="32" rx="3" ry="3" fill="#fdfaf2" transform="rotate(-2 24 19)"/>
-          <rect x="28" y="6"  width="20" height="32" rx="3" ry="3" fill="#fdfaf2" transform="rotate(10 38 22)"/>
-          <text x="6"  y="30" fill="#1d1d1d" font-family="Georgia, serif" font-weight="700" font-size="14" transform="rotate(-14 10 22)">♠</text>
-          <text x="20" y="27" fill="#c5343a" font-family="Georgia, serif" font-weight="700" font-size="14" transform="rotate(-2 24 19)">♥</text>
-          <text x="34" y="30" fill="#1d1d1d" font-family="Georgia, serif" font-weight="700" font-size="14" transform="rotate(10 38 22)">♣</text>
+        <defs>
+          <linearGradient id="brand-card" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#fffaec"/>
+            <stop offset="1" stop-color="#ecdfbf"/>
+          </linearGradient>
+          <linearGradient id="brand-gold" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#f3d27a"/>
+            <stop offset="1" stop-color="#b6862e"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(32 26)">
+          <g transform="rotate(-16) translate(-10 -16)">
+            <rect width="20" height="30" rx="2.6" ry="2.6" fill="url(#brand-card)" stroke="#7a5a1f" stroke-width="0.6"/>
+            <rect x="1.6" y="1.6" width="16.8" height="26.8" rx="1.6" ry="1.6" fill="none" stroke="url(#brand-gold)" stroke-width="0.5" opacity="0.85"/>
+            <path d="M10 7 C 6 11, 6 15, 10 18 C 14 15, 14 11, 10 7 Z M10 18 L9 22 L11 22 Z" fill="#1d1d1d"/>
+          </g>
+          <g transform="translate(-10 -17)">
+            <rect width="20" height="30" rx="2.6" ry="2.6" fill="url(#brand-card)" stroke="#7a5a1f" stroke-width="0.6"/>
+            <rect x="1.6" y="1.6" width="16.8" height="26.8" rx="1.6" ry="1.6" fill="none" stroke="url(#brand-gold)" stroke-width="0.5" opacity="0.85"/>
+            <path d="M10 7 C 5 11, 5 15, 10 19 C 15 15, 15 11, 10 7 Z M10 19 L9 22 L11 22 Z" fill="#b3262c"/>
+          </g>
+          <g transform="rotate(16) translate(-10 -16)">
+            <rect width="20" height="30" rx="2.6" ry="2.6" fill="url(#brand-card)" stroke="#7a5a1f" stroke-width="0.6"/>
+            <rect x="1.6" y="1.6" width="16.8" height="26.8" rx="1.6" ry="1.6" fill="none" stroke="url(#brand-gold)" stroke-width="0.5" opacity="0.85"/>
+            <path d="M10 8 C 8 6, 5 7, 5 11 C 5 13, 7 15, 10 16 C 13 15, 15 13, 15 11 C 15 7, 12 6, 10 8 Z M10 16 L9 22 L11 22 Z" fill="#1d1d1d"/>
+          </g>
         </g>
       </svg>
       <span class="brand-word">Shitstein</span>
@@ -84,7 +105,7 @@
             </svg>
           </div>
           <div class="mode-title">Host Online</div>
-          <div class="mode-desc">Up to 5 players over peer-to-peer WebRTC.</div>
+          <div class="mode-desc">Up to 5 players via the dedicated game relay.</div>
         </button>
         <button class="mode-btn" data-mode="online-join">
           <div class="mode-icon">
@@ -102,7 +123,7 @@
 
       <div id="mode-config" class="mode-config hidden"></div>
 
-      <p class="footnote">All gameplay runs in your browser. Online play uses WebRTC; only a public signaling broker is touched to introduce peers.</p>
+      <p class="footnote">All gameplay runs in your browser. Online play uses a small dedicated WebSocket relay — origin-locked, no accounts, no third-party trackers.</p>
     </div>
   </main>
 
