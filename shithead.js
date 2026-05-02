@@ -2856,7 +2856,11 @@ function applyMove(move, playerId) {
 
     // Defensive: if a play is rejected, log the state so we can debug and fall back to a safe
     // legal action — pick up the pile (or take the chain / accept the skip) so the game never
-    // looks like the bot just illegally played something.
+    // looks like the bot just illegally played something. CRITICAL: every fallback path must
+    // ACTUALLY advance the turn. If any fallback also fails (e.g. pickUp called with an empty
+    // discard), force advanceTurn — otherwise postMoveProcessing reschedules the same bot
+    // for another go and we loop forever (the user sees this as "thinking dots cycling, no
+    // gameplay"). See https://github.com/jammin808/Shitstein bug report 2026-05-02.
     if (result && result.ok === false) {
       const top = topDiscard(state);
       const cards = move.indices ? move.indices.map(i => {
@@ -2869,10 +2873,18 @@ function applyMove(move, playerId) {
         pendingSkips: state.pendingSkips, pickupChain: state.pickupChain,
         aceSuit: state.aceSuit, cards
       });
-      // Safe fallback so the game keeps moving (and humans never see a phantom illegal play).
-      if (state.pickupChain > 0) takeChain(state);
-      else if (state.pendingSkips > 0) skipTurn(state);
-      else pickUp(state);
+      let fallbackOk = false;
+      if (state.pickupChain > 0) {
+        const r = takeChain(state); fallbackOk = !!(r && r.ok);
+      } else if (state.pendingSkips > 0) {
+        const r = skipTurn(state); fallbackOk = !!(r && r.ok);
+      } else if (state.discard.length > 0) {
+        const r = pickUp(state); fallbackOk = !!(r && r.ok);
+      }
+      if (!fallbackOk) {
+        console.warn('[applyMove] all fallbacks failed — force advancing turn to prevent loop');
+        advanceTurn(state);
+      }
     }
   }
 
@@ -2996,7 +3008,6 @@ function postMoveProcessing() {
       if (autoPlay) {
         // Slow the pace so a human can actually read what's happened.
         const delay = 1700 + Math.floor(Math.random() * 700);
-        showThinking(cur.id);
         pendingBotTurn = false;
         setTimeout(() => { if (autoPlay) botTurn(); }, delay);
       } else {
@@ -3017,7 +3028,16 @@ function botTurn() {
   const cur = state.players[state.current];
   if (cur.isHuman) return;
   const move = botMove(state);
-  if (!move) return;
+  if (!move) {
+    // Defensive: botMove came back empty (rare edge — e.g. getActiveSource returned
+    // null because hand was empty mid-state, or a face-down phase with chain logic
+    // that the bot couldn't resolve). Don't just bail — that leaves the turn parked
+    // on this bot and the game halts. Force-advance so the next player gets a go.
+    console.warn('[botTurn] botMove returned null — forcing advanceTurn for', cur.name);
+    advanceTurn(state);
+    postMoveProcessing();
+    return;
+  }
   if      (move.action === 'pickUp')    applyMove({ type: 'pickUp' }, cur.id);
   else if (move.action === 'skip')      applyMove({ type: 'skip' }, cur.id);
   else if (move.action === 'takeChain') applyMove({ type: 'takeChain' }, cur.id);
@@ -3075,18 +3095,6 @@ function flashBurnOnDiscard() {
   flash.textContent = '🔥';
   discardEl.appendChild(flash);
   setTimeout(() => { if (flash.parentNode) flash.remove(); }, 950);
-}
-
-function showThinking(playerId) {
-  if (playerId === myPlayerId) return;
-  document.querySelectorAll('.thinking').forEach(el => el.remove());
-  const target = document.querySelector('.opponent[data-player="' + playerId + '"]');
-  if (!target) return;
-  const bubble = document.createElement('div');
-  bubble.className = 'thinking';
-  bubble.innerHTML = `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
-  target.appendChild(bubble);
-  setTimeout(() => { if (bubble.parentNode) bubble.remove(); }, 1600);
 }
 
 // --------- pass screen (hot-seat) ---------
@@ -3169,8 +3177,8 @@ function backToLobby() {
   swapSelected = { hand: null, faceUp: null };
   if (net) { try { net.cleanup(); } catch (e) {} net = null; }
   // Clear any DOM ephemera left over from the previous game so a new game starts clean:
-  // thinking dots, burn flashes, modals/passover screens, and the right-rail action log.
-  document.querySelectorAll('.passover, .modal-overlay, .thinking, .burn-flash, .disconnect-banner').forEach(el => el.remove());
+  // burn flashes, modals/passover screens, the disconnect banner.
+  document.querySelectorAll('.passover, .modal-overlay, .burn-flash, .disconnect-banner').forEach(el => el.remove());
   resetActionLog();
   $('table').classList.remove('active');
   $('lobby').classList.add('active');
