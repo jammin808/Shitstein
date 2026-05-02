@@ -988,6 +988,7 @@ function canPlayCard(card, state) {
   if (state.pickupChain > 0 && state.deck.length > 0) {
     if (card.rank === '10') return true;
     if (card.rank === '2') return true;
+    if (card.rank === '8') return true;            // 8 escapes a chain — see playCards for cancel logic
     if (isJackBlack(card)) return true;
     if (isJackRed(card) && state.pendingBlackJacks > 0) return true;
     return false;
@@ -1215,12 +1216,13 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
       }
     }
   }
-  // While a pickup chain is active, the WHOLE play must be chain-relevant — 2s, Jacks (any
-  // colour), or a 10 (which burns the chain). No other ranks may appear.
+  // While a pickup chain is active, the WHOLE play must be chain-relevant — 2s, 8s, Jacks
+  // (any colour), or a 10. 8 cancels the chain (existing chain-ended rule below clears
+  // pickupChain when the play ends on a non-2/J), and 10 burns the pile chain-and-all.
   if (state.pickupChain > 0) {
     for (const c of cards) {
-      if (c.rank === '2' || c.rank === '10' || isJackBlack(c) || isJackRed(c)) continue;
-      return { ok: false, error: 'during a pickup chain, only 2s, Jacks, or a 10 may be played' };
+      if (c.rank === '2' || c.rank === '8' || c.rank === '10' || isJackBlack(c) || isJackRed(c)) continue;
+      return { ok: false, error: 'during a pickup chain, only 2s, 8s, Jacks, or a 10 may be played' };
     }
   }
   // Red-Jack cancellations need a matching number of pending black Jacks. Count actual red Js
@@ -2472,6 +2474,21 @@ function appendActionLog(entry) {
   if (actionLog.length > 60) actionLog = actionLog.slice(-60);
 }
 
+// Online clients don't run applyMove (the host does), so they never reach the host-side
+// log-append in applyMove. Mirror the same logic here off of the synced state.lastEvent.
+let _lastClientLogEvent = null;
+function syncActionLogFromState() {
+  if (!state || !state.lastEvent || state.lastEventPlayer == null) return;
+  if (state.lastEvent === _lastClientLogEvent) return;
+  _lastClientLogEvent = state.lastEvent;
+  const actor = state.players[state.lastEventPlayer];
+  if (!actor) return;
+  const tags = state.lastEventTags || [];
+  const isBurn = tags.includes('burn') || tags.includes('fourOfKind');
+  const what = state.lastEvent.replace(new RegExp('^' + actor.name + '\\s+'), '');
+  appendActionLog({ player: actor.id, name: actor.name, html: escapeHtml(what), ts: Date.now(), burn: isBurn });
+}
+
 function onCardClick(source, idx) {
   Idle.bump();
   if (isSelected(source, idx)) {
@@ -3295,8 +3312,9 @@ function loadPeerJS() {
 
 // PeerJS connection options. We provide BOTH STUN and TURN because peers behind symmetric
 // NAT or strict firewalls need a TURN relay to actually exchange media — STUN alone fails
-// silently for those users. The TURN credentials are the public ones PeerJS itself ships
-// with. debug: 2 prints warnings + errors so failures show up in the console.
+// silently for those users. We include UDP and TCP TURN variants (TCP for users whose
+// networks block UDP on TURN ports), plus a fallback public TURN provider in case the
+// peerjs.com relays are throttled. debug: 2 prints warnings + errors to the console.
 const PEER_CONFIG = {
   debug: 2,
   config: {
@@ -3308,9 +3326,23 @@ const PEER_CONFIG = {
         urls: [
           'turn:eu-0.turn.peerjs.com:3478',
           'turn:us-0.turn.peerjs.com:3478',
+          'turn:eu-0.turn.peerjs.com:3478?transport=tcp',
+          'turn:us-0.turn.peerjs.com:3478?transport=tcp',
         ],
         username: 'peerjs',
         credential: 'peerjsp',
+      },
+      // Open Relay (metered.ca) — free public TURN with UDP, TCP, and TCP-on-443 endpoints.
+      // Useful as a fallback when the peerjs.com relays are slow or a strict network blocks
+      // UDP / non-standard ports. TCP-on-443 generally punches through the strictest firewalls.
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
       },
     ],
   },
@@ -3609,6 +3641,7 @@ function joinRoom(roomId, myName) {
           state = deserializeStateForClient(data.state);
           $('lobby').classList.remove('active');
           $('table').classList.add('active');
+          syncActionLogFromState();
           renderTable();
           if (state.phase === 'over') showGameOver();
         }
