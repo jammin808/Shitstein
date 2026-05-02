@@ -1011,7 +1011,6 @@ function canPlayCard(card, state) {
   if (state.pickupChain > 0 && state.deck.length > 0) {
     if (card.rank === '10') return true;
     if (card.rank === '2') return true;
-    if (card.rank === '8') return true;            // 8 escapes a chain — see playCards for cancel logic
     if (isJackBlack(card)) return true;
     if (isJackRed(card) && state.pendingBlackJacks > 0) return true;
     return false;
@@ -1243,13 +1242,14 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
       }
     }
   }
-  // While a pickup chain is active, the WHOLE play must be chain-relevant — 2s, 8s, Jacks
-  // (any colour), or a 10. 8 cancels the chain (existing chain-ended rule below clears
-  // pickupChain when the play ends on a non-2/J), and 10 burns the pile chain-and-all.
+  // While a pickup chain is active, the WHOLE play must be chain-relevant — 2s, Jacks
+  // (any colour), or a 10. 10 burns the pile chain-and-all. (8 was briefly allowed
+  // during a chain but the rule has been reverted: 8 cannot go when the pickup chain
+  // is not empty.)
   if (state.pickupChain > 0) {
     for (const c of cards) {
-      if (c.rank === '2' || c.rank === '8' || c.rank === '10' || isJackBlack(c) || isJackRed(c)) continue;
-      return { ok: false, error: 'during a pickup chain, only 2s, 8s, Jacks, or a 10 may be played' };
+      if (c.rank === '2' || c.rank === '10' || isJackBlack(c) || isJackRed(c)) continue;
+      return { ok: false, error: 'during a pickup chain, only 2s, Jacks, or a 10 may be played' };
     }
   }
   // Red-Jack cancellations need a matching number of pending black Jacks. Count actual red Js
