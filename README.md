@@ -26,7 +26,7 @@ Plus a few house rules (see below).
 | Card | Effect |
 |------|--------|
 | **2** | Wild lead + pickup chain +2. Plays on anything (like a 10), unless the 8 skip queue is alive. The next player picks up 2 unless they counter. |
-| **7** | Lower-or-equal lock. Plays per the normal rule (not wild). When a 7 is on top, the next player must play rank ≤ 7 or a 10. |
+| **7** | Lower-or-equal lock. Plays per the normal rule (not wild). When a 7 is on top, the next player must play rank ≤ 7 or a 10. **In your own hand chain, a same-suit 8 may chain after a 7** (e.g., 7♠ → 8♠) as a run extension; all other ranks > 7 stay blocked. |
 | **8** | Skip stack. Each 8 queues one skip. While the queue is alive, only another 8 plays. **Cannot be played while a pickup chain is active** — only 2s, Jacks, or a 10 may go during a chain. **Cannot follow a Jack** at the top of the pile. |
 | **10** | Burn / wild lead. Single-card 10 plays on anything (incl. a pickup chain) and clears the pile. As a chain link a 10 must follow numerical sequence. |
 | **J** | Plays on another Jack or in suit (normal value/suit sequence). Black Jacks (♠ ♣) add +5 to the pickup chain. Red Jacks (♥ ♦) play per the same normal Jack rules — and **additionally** can cancel a pending black Jack (deducting 5 from the chain) when the deck is not empty and the pickup chain is alive. **Blocks 8** as the lead on a Jack-topped pile. **Blocks Ace** specifically on a black Jack while the deck still has cards (Ace plays on a red Jack always, and on a black Jack once the deck is empty). |

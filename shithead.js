@@ -911,9 +911,13 @@ function canPlayOnCard(card, prevCard) {
   // lock in canPlayCard still gates the NEXT player from any non-8 single-card lead
   // when an 8 is on top.)
   // 7-lock: when a 7 sits at the head of the chain link, only ranks ≤ 7 (which still must
-  // satisfy chainStep) or a 10 (wild burn) may follow. 8 / 9 / J / Q / K / A are blocked.
+  // satisfy chainStep) or a 10 (wild burn) may follow. 8 / 9 / J / Q / K / A are blocked —
+  // EXCEPT a same-suit 8, which is allowed as a 7→8 same-suit run extension. (All other
+  // > 7 ranks remain blocked by the 7-lock.) The mirror direction (8 → 7 same suit) was
+  // already legal via chainStep's ±1-same-suit rule when the previous card is the 8.
   if (prevCard.rank === '7') {
     if (card.rank === '10') return true;
+    if (card.rank === '8' && card.suit === prevCard.suit) return true;
     if (RANK_VAL[card.rank] > 7) return false;
     // fall through to chainStep / card-specific rules for ≤ 7.
   }
