@@ -1945,7 +1945,15 @@ function cornerSVG(rank, suit) {
   `;
 }
 
+// SVG strings are deterministic per card and never mutated, so we memoize them.
+// 52 cards + 1 back means a 53-entry cache after the first full render.
+const _cardSVGCache = new Map();
+let _cardBackSVGCache = null;
+
 function renderCardSVG(card) {
+  const key = card.rank + card.suit;
+  const hit = _cardSVGCache.get(key);
+  if (hit) return hit;
   const isRed = (card.suit === 'H' || card.suit === 'D');
   const colorClass = isRed ? 'red' : 'black';
   const center = (card.rank === 'J' || card.rank === 'Q' || card.rank === 'K' || card.rank === 'A')
@@ -1955,15 +1963,18 @@ function renderCardSVG(card) {
     <g>${cornerSVG(card.rank, card.suit)}</g>
     <g transform="rotate(180 50 70)">${cornerSVG(card.rank, card.suit)}</g>
   `;
-  return `<svg class="card-svg ${colorClass}" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet">
+  const svg = `<svg class="card-svg ${colorClass}" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet">
     <rect x="1" y="1" width="98" height="138" rx="9" ry="9" class="card-bg"/>
     ${corners}
     ${center}
   </svg>`;
+  _cardSVGCache.set(key, svg);
+  return svg;
 }
 
 function renderCardBackSVG() {
-  return `<svg class="card-svg card-back-svg" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet">
+  if (_cardBackSVGCache) return _cardBackSVGCache;
+  _cardBackSVGCache = `<svg class="card-svg card-back-svg" viewBox="0 0 100 140" preserveAspectRatio="xMidYMid meet">
     <rect x="1" y="1" width="98" height="138" rx="9" ry="9" fill="#7a1d1d"/>
     <rect x="4" y="4" width="92" height="132" rx="7" ry="7" fill="url(#back-weave)"/>
     <rect x="9" y="9" width="82" height="122" rx="5" ry="5" fill="none" stroke="#f1d9a4" stroke-width="0.8"/>
@@ -1974,6 +1985,7 @@ function renderCardBackSVG() {
       <text y="6" text-anchor="middle" font-size="16" letter-spacing="-1">SH</text>
     </g>
   </svg>`;
+  return _cardBackSVGCache;
 }
 
 function renderCard(card, opts = {}) {
@@ -1996,61 +2008,95 @@ function renderCard(card, opts = {}) {
 }
 
 // --------- main render ---------
+// Section-level signatures so renderTable() can skip rebuilds when nothing in
+// a given section has changed. Most moves only touch one player's hand and the
+// discard top, so opponents/deck/turn-indicator usually short-circuit. The
+// signatures must include EVERY input that affects the rendered output for
+// their section — when in doubt, add a field rather than skip a render.
+const _renderSig = { opp: null, deck: null, discard: null, turn: null };
+function _opponentsSig() {
+  return state.players.map(p =>
+    `${p.id}:${p.name}:${p.hand.length}:${p.faceUp.map(c => c.rank + c.suit).join('')}:${p.faceDown.length}:${p.finished ? 1 : 0}`
+  ).join('|') + `|cur=${state.current}|ph=${state.phase}|me=${myPlayerId}`;
+}
+function _deckSig() { return `${state.deck.length}`; }
+function _discardSig() {
+  const top = topDiscard(state);
+  const chain = state.lastPlayCards;
+  return `${state.discard.length}:${top ? top.rank + top.suit : ''}:${chain ? chain.map(c => c.rank + c.suit).join(',') : ''}`;
+}
+function _turnSig() {
+  const cur = state.players[state.current];
+  return `${state.phase}:${state.current}:${cur ? cur.name : ''}`;
+}
+
 function renderTable() {
   if (!state) return;
   const me = state.players[myPlayerId];
 
   // ---- Opponents ----
   const oppContainer = $('opponents');
-  oppContainer.innerHTML = '';
-  for (const p of state.players) {
-    if (p.id === myPlayerId) continue;
-    const opp = document.createElement('div');
-    opp.className = 'opponent';
-    opp.dataset.player = p.id;
-    if (state.current === p.id && state.phase === 'play') opp.classList.add('active');
-    if (p.finished) opp.classList.add('finished');
+  const oppSig = _opponentsSig();
+  if (oppSig !== _renderSig.opp) {
+    _renderSig.opp = oppSig;
+    oppContainer.innerHTML = '';
+    for (const p of state.players) {
+      if (p.id === myPlayerId) continue;
+      const opp = document.createElement('div');
+      opp.className = 'opponent';
+      opp.dataset.player = p.id;
+      if (state.current === p.id && state.phase === 'play') opp.classList.add('active');
+      if (p.finished) opp.classList.add('finished');
 
-    const turnDot = (state.current === p.id && state.phase === 'play') ? '<span class="pulse">⏳</span>' : '';
-    const trophy  = p.finished ? '🏆' : '';
-    opp.innerHTML = `
-      <div class="opponent-name">${trophy} ${escapeHtml(p.name)} ${turnDot}</div>
-      <div class="opponent-counts">Hand: ${p.hand.length} • Up: ${p.faceUp.length} • Down: ${p.faceDown.length}${p.finished ? ' • OUT' : ''}</div>
-    `;
+      const turnDot = (state.current === p.id && state.phase === 'play') ? '<span class="pulse">⏳</span>' : '';
+      const trophy  = p.finished ? '🏆' : '';
+      opp.innerHTML = `
+        <div class="opponent-name">${trophy} ${escapeHtml(p.name)} ${turnDot}</div>
+        <div class="opponent-counts">Hand: ${p.hand.length} • Up: ${p.faceUp.length} • Down: ${p.faceDown.length}${p.finished ? ' • OUT' : ''}</div>
+      `;
 
-    const stacks = document.createElement('div');
-    stacks.className = 'opponent-stacks';
-    for (let i = 0; i < p.faceDown.length; i++) stacks.appendChild(renderCard(null, { back: true, size: 'small' }));
-    for (const c of p.faceUp) stacks.appendChild(renderCard(c, { size: 'small' }));
-    opp.appendChild(stacks);
+      const stacks = document.createElement('div');
+      stacks.className = 'opponent-stacks';
+      for (let i = 0; i < p.faceDown.length; i++) stacks.appendChild(renderCard(null, { back: true, size: 'small' }));
+      for (const c of p.faceUp) stacks.appendChild(renderCard(c, { size: 'small' }));
+      opp.appendChild(stacks);
 
-    if (p.hand.length > 0) {
-      const hand = document.createElement('div');
-      hand.className = 'opponent-hand';
-      for (let i = 0; i < p.hand.length; i++) hand.appendChild(renderCard(null, { back: true, size: 'tiny' }));
-      opp.appendChild(hand);
+      if (p.hand.length > 0) {
+        const hand = document.createElement('div');
+        hand.className = 'opponent-hand';
+        for (let i = 0; i < p.hand.length; i++) hand.appendChild(renderCard(null, { back: true, size: 'tiny' }));
+        opp.appendChild(hand);
+      }
+      oppContainer.appendChild(opp);
     }
-    oppContainer.appendChild(opp);
   }
 
   // ---- Deck ----
   const deckEl = $('deck');
-  deckEl.innerHTML = '';
-  if (state.deck.length > 0) {
-    deckEl.appendChild(renderCard(null, { back: true }));
-    const lbl = document.createElement('div');
-    lbl.className = 'pile-count';
-    lbl.textContent = `${state.deck.length} left`;
-    deckEl.appendChild(lbl);
-  } else {
-    const e = document.createElement('div');
-    e.className = 'empty-slot';
-    e.textContent = 'deck';
-    deckEl.appendChild(e);
+  const deckSig = _deckSig();
+  if (deckSig !== _renderSig.deck) {
+    _renderSig.deck = deckSig;
+    deckEl.innerHTML = '';
+    if (state.deck.length > 0) {
+      deckEl.appendChild(renderCard(null, { back: true }));
+      const lbl = document.createElement('div');
+      lbl.className = 'pile-count';
+      lbl.textContent = `${state.deck.length} left`;
+      deckEl.appendChild(lbl);
+    } else {
+      const e = document.createElement('div');
+      e.className = 'empty-slot';
+      e.textContent = 'deck';
+      deckEl.appendChild(e);
+    }
   }
 
   // ---- Discard ----
   const discardEl = $('discard');
+  const discardSig = _discardSig();
+  const _discardChanged = (discardSig !== _renderSig.discard);
+  if (_discardChanged) _renderSig.discard = discardSig;
+  if (_discardChanged) {
   discardEl.innerHTML = '';
   const top = topDiscard(state);
   if (top) {
@@ -2108,16 +2154,21 @@ function renderTable() {
     e.textContent = 'discard';
     discardEl.appendChild(e);
   }
+  } // end if (_discardChanged)
 
   // ---- Turn indicator ----
-  const turnLabel = $('turn-indicator');
-  if (state.phase === 'over') {
-    turnLabel.textContent = '🎉 Game Over';
-  } else if (state.phase === 'swap') {
-    turnLabel.textContent = 'Swap phase — ready up when satisfied';
-  } else {
-    const cur = state.players[state.current];
-    turnLabel.textContent = (cur.id === myPlayerId) ? '🎯 Your turn' : `${cur.name}'s turn`;
+  const turnSig = _turnSig();
+  if (turnSig !== _renderSig.turn) {
+    _renderSig.turn = turnSig;
+    const turnLabel = $('turn-indicator');
+    if (state.phase === 'over') {
+      turnLabel.textContent = '🎉 Game Over';
+    } else if (state.phase === 'swap') {
+      turnLabel.textContent = 'Swap phase — ready up when satisfied';
+    } else {
+      const cur = state.players[state.current];
+      turnLabel.textContent = (cur.id === myPlayerId) ? '🎯 Your turn' : `${cur.name}'s turn`;
+    }
   }
 
   // ---- Me header ----
