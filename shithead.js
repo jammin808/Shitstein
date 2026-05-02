@@ -1004,6 +1004,14 @@ function canPlayCard(card, state) {
     }
   }
 
+  // House rule: while the deck has cards, a red Jack ONLY plays to cancel a pending
+  // black Jack. Without a BJ to cancel (pendingBlackJacks === 0) the red J is blocked
+  // regardless of suit / top card. Once the deck is empty, red Js fall back to the
+  // normal Jack-card rules (any-Jack pair, in-suit higher).
+  if (isJackRed(card) && state.deck.length > 0 && state.pendingBlackJacks === 0) {
+    return false;
+  }
+
   // Pickup chain: 2 / black-J / red-J-cancel extend or counter the chain. A 10 is universally
   // wild and clears the pack — including the chain.
   // House rule: once the deck is empty, all 2/Jack pickup penalties are bypassed for the
@@ -1070,6 +1078,10 @@ function canPlayCard(card, state) {
   // K and 2 are 11 ranks apart so the same-suit ±1 check fails.
   if (card.rank === 'K') {
     if (top.rank === 'K') return true;
+    // House rule: a K plays on a red Jack of any suit once the pickup chain is
+    // empty. If chain > 0 we never reach here — K isn't a counter card and gets
+    // blocked by the pickup-chain whitelist above.
+    if (isJackRed(top) && state.pickupChain === 0) return true;
     const fresh = state.turnCount === (state.topPlayedAtTurn + 1);
     if (fresh && (top.rank === '2' || top.rank === '8' || top.rank === 'J')) return false;
     return card.suit === matchSuit;
