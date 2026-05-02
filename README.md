@@ -27,12 +27,12 @@ Plus a few house rules (see below).
 |------|--------|
 | **2** | Wild lead + pickup chain +2. Plays on anything (like a 10), unless the 8 skip queue is alive. The next player picks up 2 unless they counter. |
 | **7** | Lower-or-equal lock. Plays per the normal rule (not wild). When a 7 is on top, the next player must play rank ≤ 7 or a 10. |
-| **8** | Skip stack. Each 8 queues one skip. While the queue is alive, only another 8 plays. Also cancels a pickup chain — playing an 8 on a 2 (or any +N chain) clears the chain and queues a skip on the next player. |
+| **8** | Skip stack. Each 8 queues one skip. While the queue is alive, only another 8 plays. Also cancels a pickup chain — playing an 8 on a 2 (or any +N chain) clears the chain and queues a skip on the next player. **Cannot follow a Jack.** |
 | **10** | Burn / wild lead. Single-card 10 plays on anything (incl. a pickup chain) and clears the pile. As a chain link a 10 must follow numerical sequence. |
-| **J** | Plays on another Jack or in suit. Black Jacks (♠ ♣) add +5 to the pickup chain; red Jacks (♥ ♦) cancel a black Jack. |
+| **J** | Plays on another Jack or in suit. Black Jacks (♠ ♣) add +5 to the pickup chain; red Jacks (♥ ♦) cancel a black Jack. **Blocks 8 and Ace** — neither can be played as the lead on a Jack-topped pile. |
 | **Q** | Reverse + lock. Plays on another Q or in suit. Once on top, only Q / 2 / 10 / A / higher-same-suit may follow. |
 | **K** | Royal demand. Plays on another K or in suit. Cannot follow a freshly-placed 2 / 8 / J — the previous player must have had a turn to react. Solo King draws +1 from the deck. |
-| **A** | Wild. Plays at any time except after a 2, black J, or 8. Names the suit the next player must follow. |
+| **A** | Wild. Plays at any time except after a 2, any Jack, or an 8. Names the suit the next player must follow. |
 | **4 of a kind** | Burns the pile (any rank, including specials). |
 
 ### House rules

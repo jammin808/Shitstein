@@ -981,6 +981,14 @@ function chainStep(card, prevCard) {
 }
 
 function canPlayCard(card, state) {
+  // House rule: a Jack on top blocks both 8 and Ace, regardless of pickup-chain or
+  // any other state. All OTHER rules for 8 and Ace still apply on every other top
+  // card (8 plays on 2-chain via the chain-cancel path, Ace remains wild on
+  // non-Jack tops, etc.). This is checked first so it wins over the chain/skip
+  // allowances below.
+  const _topJ = topDiscard(state);
+  if (_topJ && _topJ.rank === 'J' && (card.rank === '8' || card.rank === 'A')) return false;
+
   // Pickup chain: 2 / black-J / red-J-cancel extend or counter the chain. A 10 is universally
   // wild and clears the pack — including the chain.
   // House rule: once the deck is empty, all 2/Jack pickup penalties are bypassed for the
