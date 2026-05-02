@@ -892,18 +892,17 @@ function canPlayOnCard(card, prevCard) {
   // Ace chain rule (same logic as 10): an Ace in a chain must follow numerical sequence.
   // Likewise anything FOLLOWING an Ace must be in sequence — so the Ace doesn't chain off
   // a non-adjacent rank, and it doesn't render the next card wild either.
-  // House rule: an Ace and a 2 chain together regardless of suit (2 ↔ A in either
-  // direction). The standard low-Ace neighbour in chainStep still requires same suit
-  // for non-2 ranks; this exception just relaxes the suit constraint specifically for
-  // the A/2 pair, which the user wants treatable as wraparound in hand selections.
+  //
+  // ASYMMETRIC house rule for the A/2 pair:
+  //   - 2 → A in a hand chain works regardless of suit (any-suit pair).
+  //   - A → 2 still has to match the Ace's called suit — handled by chainStep
+  //     (after playCards substitutes the called suit into prev) and additionally
+  //     by canSelect's `lastCard.rank === 'A'` branch.
   if (card.rank === 'A')  {
     if (prevCard.rank === '2') return true;
     return chainStep(card, prevCard);
   }
-  if (prevCard.rank === 'A') {
-    if (card.rank === '2') return true;
-    return chainStep(card, prevCard);
-  }
+  if (prevCard.rank === 'A') return chainStep(card, prevCard);
   // 2-card chain rule (matches 10/Ace): a 2 is wild as a single-card LEAD, but in a chain
   // it must follow numerical sequence — same rank (pair), strictly consecutive same-suit
   // (±1), or the low-Ace neighbour. The historical exception: a 2 may chain off a black
@@ -1009,12 +1008,14 @@ function canPlayCard(card, state) {
     const _isFresh = state.turnCount === (state.topPlayedAtTurn + 1);
     if (card.rank === '8' && _top0.rank === 'J') return false;
     if (card.rank === 'A') {
-      // Ace blocked on a 2 ONLY while a pickup chain is alive. Once the chain is
-      // empty (taken / 10-burned / never formed because the deck was empty when the
-      // 2 was played), the 2 is just a guide and Ace plays normally on it.
-      if (_top0.rank === '2' && state.pickupChain > 0) return false;
-      // Ace blocked on a freshly-placed Black Jack while the deck still has cards.
-      // Stale BJ unblocks; deck-empty BJ also unblocks (existing house rule).
+      // Universal: an Ace cannot be played anytime the pickup chain is alive.
+      // Subsumes the previous Ace-on-fresh-2 / Ace-on-BJ-with-deck rules for the
+      // common case (chain > 0). When chain == 0, fall through to the BJ-specific
+      // freshness gate below for the deck-non-empty fresh-BJ case.
+      if (state.pickupChain > 0) return false;
+      // With chain == 0: Ace blocked on a freshly-placed Black Jack while the deck
+      // still has cards. Stale BJ unblocks; deck-empty BJ also unblocks (existing
+      // house rule). 7-lock and skip-lock are handled by the standard rules below.
       if (isJackBlack(_top0) && _isFresh && state.deck.length > 0) return false;
     }
   }
