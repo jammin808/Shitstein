@@ -982,17 +982,25 @@ function chainStep(card, prevCard) {
 function canPlayCard(card, state) {
   // ---- House rules: top-of-pile blocks for 8 and Ace ----
   // Checked before anything else so they win over chain/skip allowances below.
+  //
   // 8: cannot follow a Jack of any colour. (8 still cancels a 2-chain on 2-top etc.)
-  // Ace: cannot follow a 2 (always), cannot follow a Black Jack while the deck
-  //      still has cards, but CAN follow a Red Jack (always) and CAN follow a
-  //      Black Jack once the deck is empty (the "no-more-pickups" relaxation).
-  //      All of Ace's normal wild behaviour on every other top card stays.
+  //
+  // Ace blocks are gated on freshness — a chain card (2 or Black Jack) only
+  // imposes its restrictive rule while it's freshly placed (i.e. you are the
+  // very next player after it landed). Once a turn has passed without it being
+  // played on (the next player took the chain, was skipped, etc.), the chain
+  // card becomes a stale "guide" — Ace plays per its normal wild rules: any
+  // suit, names the next suit. Same-deck-empty exception still relaxes BJ.
   const _top0 = topDiscard(state);
   if (_top0) {
+    const _isFresh = state.turnCount === (state.topPlayedAtTurn + 1);
     if (card.rank === '8' && _top0.rank === 'J') return false;
     if (card.rank === 'A') {
-      if (_top0.rank === '2') return false;
-      if (isJackBlack(_top0) && state.deck.length > 0) return false;
+      // Ace blocked on a freshly-placed 2 (chain unresolved). Stale 2 unblocks.
+      if (_top0.rank === '2' && _isFresh) return false;
+      // Ace blocked on a freshly-placed Black Jack while the deck still has cards.
+      // Stale BJ unblocks; deck-empty BJ also unblocks (existing house rule).
+      if (isJackBlack(_top0) && _isFresh && state.deck.length > 0) return false;
     }
   }
 
