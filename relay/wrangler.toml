@@ -1,0 +1,13 @@
+name = "shitstein-relay"
+main = "src/worker.js"
+compatibility_date = "2024-09-01"
+
+# Durable Object that holds per-room state (one instance per room code).
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+# First migration declares the new DO class. Required by wrangler.
+[[migrations]]
+tag = "v1"
+new_classes = ["Room"]

@@ -2,7 +2,7 @@
 
 /* ============================================================
  *  SHITHEAD — fully client-side card game
- *  Engine + AI + UI + WebRTC multiplayer (PeerJS)
+ *  Engine + AI + UI + WebSocket multiplayer (relay in /relay)
  * ============================================================ */
 
 // =================== CONSTANTS ===================
@@ -3292,61 +3292,27 @@ function startLocalGame(names, humansArr, primaryHumanId) {
   postMoveProcessing();
 }
 
-// =================== ONLINE MULTIPLAYER (PeerJS) ===================
+// =================== ONLINE MULTIPLAYER (WebSocket relay) ===================
+//
+// Online play uses a tiny WebSocket relay (Cloudflare Worker + Durable Object —
+// see /relay) instead of WebRTC peer-to-peer. The previous PeerJS path failed
+// silently for users behind symmetric NATs / strict firewalls; a public relay
+// is always reachable so connectivity is no longer the bottleneck. Topology is
+// unchanged: the host runs the engine, clients send `move` packets, the host
+// applies them and broadcasts new `state`. The relay just routes bytes between
+// the host socket and the client sockets in a given room.
+//
+// Set RELAY_URL to YOUR deployed worker's wss:// URL — see /relay/README.md.
+const RELAY_URL = 'wss://shitstein-relay.YOUR-CF-SUBDOMAIN.workers.dev';
+function relayConfigured() { return !RELAY_URL.includes('YOUR-CF-SUBDOMAIN'); }
 
-const PEERJS_SRC = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
-let peerJsLoader = null;
-function loadPeerJS() {
-  if (typeof Peer !== 'undefined') return Promise.resolve();
-  if (peerJsLoader) return peerJsLoader;
-  peerJsLoader = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = PEERJS_SRC;
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => { peerJsLoader = null; reject(new Error('Failed to load PeerJS from ' + PEERJS_SRC)); };
-    document.head.appendChild(s);
-  });
-  return peerJsLoader;
+// Short, readable, hard-to-confuse room codes (no 0/O, no 1/I/L).
+function generateRoomCode() {
+  const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 5; i++) s += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+  return s;
 }
-
-// PeerJS connection options. We provide BOTH STUN and TURN because peers behind symmetric
-// NAT or strict firewalls need a TURN relay to actually exchange media — STUN alone fails
-// silently for those users. We include UDP and TCP TURN variants (TCP for users whose
-// networks block UDP on TURN ports), plus a fallback public TURN provider in case the
-// peerjs.com relays are throttled. debug: 2 prints warnings + errors to the console.
-const PEER_CONFIG = {
-  debug: 2,
-  config: {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-      {
-        urls: [
-          'turn:eu-0.turn.peerjs.com:3478',
-          'turn:us-0.turn.peerjs.com:3478',
-          'turn:eu-0.turn.peerjs.com:3478?transport=tcp',
-          'turn:us-0.turn.peerjs.com:3478?transport=tcp',
-        ],
-        username: 'peerjs',
-        credential: 'peerjsp',
-      },
-      // Open Relay (metered.ca) — free public TURN with UDP, TCP, and TCP-on-443 endpoints.
-      // Useful as a fallback when the peerjs.com relays are slow or a strict network blocks
-      // UDP / non-standard ports. TCP-on-443 generally punches through the strictest firewalls.
-      {
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:443?transport=tcp',
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-    ],
-  },
-};
 
 // Build a shareable join URL for a given room code, anchored to the page that's loaded.
 function buildShareUrl(roomId) {
@@ -3356,27 +3322,6 @@ function buildShareUrl(roomId) {
   return url.toString();
 }
 
-// Heartbeat: every HEARTBEAT_INTERVAL ms each side sends a ping; if no pong arrives within
-// HEARTBEAT_TIMEOUT, the connection is considered dead and is closed so PeerJS surfaces the
-// drop via 'close'. WebRTC's own keep-alive is unreliable on some carriers.
-const HEARTBEAT_INTERVAL = 10000;
-const HEARTBEAT_TIMEOUT  = 30000;
-function attachHeartbeat(conn, label) {
-  let lastPong = Date.now();
-  let pingTimer = null;
-  let watchTimer = null;
-  const onData = (data) => { if (data && data.type === 'ping') { try { conn.send({ type: 'pong' }); } catch (_) {} } else if (data && data.type === 'pong') { lastPong = Date.now(); } };
-  conn.on('data', onData);
-  pingTimer  = setInterval(() => { try { conn.send({ type: 'ping' }); } catch (_) {} }, HEARTBEAT_INTERVAL);
-  watchTimer = setInterval(() => {
-    if (Date.now() - lastPong > HEARTBEAT_TIMEOUT) {
-      console.warn(`[heartbeat] ${label || 'peer'} silent > ${HEARTBEAT_TIMEOUT}ms — closing`);
-      try { conn.close(); } catch (_) {}
-    }
-  }, HEARTBEAT_INTERVAL);
-  conn.on('close', () => { clearInterval(pingTimer); clearInterval(watchTimer); });
-}
-
 function buildHostConfig(cfg) {
   cfg.innerHTML = `
     <h3>Host Online Game</h3>
@@ -3384,13 +3329,11 @@ function buildHostConfig(cfg) {
     <button class="primary" id="cfg-host">Create Room</button>
     <div id="host-room" class="hidden" style="margin-top:18px;"></div>
   `;
-  $('cfg-host').addEventListener('click', async () => {
-    const btn = $('cfg-host');
-    const prevText = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Loading…';
-    try { await loadPeerJS(); }
-    catch (_) { btn.disabled = false; btn.textContent = prevText; return alert('PeerJS failed to load. Check your network.'); }
-    btn.disabled = false; btn.textContent = prevText;
+  $('cfg-host').addEventListener('click', () => {
+    if (!relayConfigured()) {
+      alert("Online play needs a relay server. Deploy the worker in /relay (see relay/README.md) and set RELAY_URL in shithead.js.");
+      return;
+    }
     const name = ($('cfg-name').value.trim() || 'Host').slice(0, 16);
     startHosting(name);
   });
@@ -3401,58 +3344,75 @@ function startHosting(myName) {
   hostBtn.disabled = true;
   hostBtn.textContent = 'Connecting…';
 
-  // Sanity timeout: if the broker doesn't assign us an ID within 15 s, give the user a way
-  // to retry instead of silently leaving the button grey forever.
+  const roomCode = generateRoomCode();
+  let ws;
+  try {
+    ws = new WebSocket(`${RELAY_URL}/room/${roomCode}?role=host`);
+  } catch (e) {
+    console.error('[host] failed to open WebSocket', e);
+    alert("Couldn't open WebSocket: " + (e.message || e));
+    hostBtn.disabled = false; hostBtn.textContent = 'Create Room';
+    return;
+  }
+
+  // Sanity timeout: if the relay doesn't say roomReady within 10s, give the user a clear out.
   const openTimeout = setTimeout(() => {
     if (hostBtn.disabled && hostBtn.textContent === 'Connecting…') {
-      console.warn('[host] broker did not assign an ID within 15s');
-      hostBtn.disabled = false;
-      hostBtn.textContent = 'Retry';
-      alert("Couldn't reach the PeerJS broker. Check your connection (or try a different browser / ad-blocker) and click Retry.");
+      console.warn('[host] relay did not roomReady within 10s');
+      try { ws.close(); } catch (_) {}
+      hostBtn.disabled = false; hostBtn.textContent = 'Retry';
+      alert("Couldn't reach the game relay. Check your connection and try again.");
     }
-  }, 15000);
+  }, 10000);
 
-  const peer = new Peer(undefined, PEER_CONFIG);
-  peer.on('open', (id) => {
+  let opened = false;
+  ws.addEventListener('open', () => { opened = true; });
+  // Initial listener: waits for the relay's roomReady, then hands off to showHostLobby
+  // (which attaches its own message listener for ongoing traffic). We don't bother removing
+  // this listener — the relay only sends roomReady once per host socket.
+  ws.addEventListener('message', (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch (_) { return; }
+    if (msg.type !== 'roomReady') return;
     clearTimeout(openTimeout);
-    console.log('[host] room open — peer id', id);
-    // Hide the Create Room form (button + name input) so the user sees a clean lobby.
+    console.log('[host] room open — code', roomCode);
     hostBtn.style.display = 'none';
     const nameInput = $('cfg-name');
     if (nameInput) {
       const nameRow = nameInput.closest('.row');
       if (nameRow) nameRow.style.display = 'none';
     }
-    showHostLobby(peer, id, myName);
+    showHostLobby(ws, roomCode, myName);
   });
-  peer.on('disconnected', () => {
-    console.warn('[host] disconnected from broker — attempting reconnect');
-    try { peer.reconnect(); } catch (_) {}
-  });
-  peer.on('error', (err) => {
+  ws.addEventListener('error', () => {
     clearTimeout(openTimeout);
-    const msg = (err && (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error'))
-      ? `Couldn't reach the matchmaking broker. This is usually a network/firewall block — try another network or browser.\n(${err.type})`
-      : (err && err.type === 'unavailable-id')
-        ? 'That room ID is already taken — try again.'
-        : 'Network error: ' + (err.message || err.type || err);
-    alert(msg);
-    console.error('[host] peer error', err);
-    hostBtn.style.display = '';
-    hostBtn.disabled = false;
-    hostBtn.textContent = 'Create Room';
+    console.error('[host] websocket error');
+    if (!opened) {
+      alert("Network error connecting to the game relay. The server may be down, your origin may not be allowed, or your network may be blocking WebSockets.");
+      hostBtn.style.display = '';
+      hostBtn.disabled = false; hostBtn.textContent = 'Create Room';
+    }
+  });
+  ws.addEventListener('close', (ev) => {
+    clearTimeout(openTimeout);
+    if (!opened) {
+      const reason = ev.reason || `code ${ev.code}`;
+      alert("Couldn't open the relay connection: " + reason);
+      hostBtn.style.display = '';
+      hostBtn.disabled = false; hostBtn.textContent = 'Create Room';
+    }
   });
 }
 
-function showHostLobby(peer, peerId, hostName) {
+function showHostLobby(ws, roomCode, hostName) {
   const div = $('host-room');
-  const shareUrl = buildShareUrl(peerId);
+  const shareUrl = buildShareUrl(roomCode);
   div.classList.remove('hidden');
   div.innerHTML = `
     <p>Send this <strong>invite link</strong> to friends — they click it and they're in:</p>
     <div class="code-display" id="copy-link" title="Click to copy link">${escapeHtml(shareUrl)}</div>
-    <p class="muted" style="font-size:12px;margin-top:6px;">Or share the room code: <code id="copy-id" style="cursor:pointer" title="Click to copy code">${escapeHtml(peerId)}</code></p>
-    <p class="muted" style="font-size:12px;">Peer-to-peer over WebRTC. The room exists only as long as this tab stays open. Up to 5 players.</p>
+    <p class="muted" style="font-size:12px;margin-top:6px;">Or share the room code: <code id="copy-id" style="cursor:pointer" title="Click to copy code">${escapeHtml(roomCode)}</code></p>
+    <p class="muted" style="font-size:12px;">Game runs over a small WebSocket relay. The room exists only as long as this tab stays open. Up to 5 players.</p>
     <h4 style="margin-top:14px;margin-bottom:6px;">Players in lobby</h4>
     <ul class="players-list" id="lobby-players"></ul>
     <button class="primary" id="start-online">Start Game</button>
@@ -3467,9 +3427,13 @@ function showHostLobby(peer, peerId, hostName) {
     } catch (e) {/* fallback: leave it */}
   };
   $('copy-link').addEventListener('click', () => copyToClipboard(shareUrl, $('copy-link')));
-  $('copy-id').addEventListener('click', () => copyToClipboard(peerId, $('copy-id')));
+  $('copy-id').addEventListener('click', () => copyToClipboard(roomCode, $('copy-id')));
 
-  const connections = []; // { conn, name, playerId? }
+  const connections = []; // { connId, name, playerId? }
+
+  function sendTo(connId, body) {
+    try { ws.send(JSON.stringify({ ...body, to: connId })); } catch (_) {}
+  }
 
   function refreshLobby() {
     const ul = $('lobby-players');
@@ -3485,8 +3449,7 @@ function showHostLobby(peer, peerId, hostName) {
         const idx = parseInt(btn.dataset.idx, 10);
         const c = connections[idx];
         if (!c) return;
-        try { c.conn.send({ type: 'reject', reason: 'You were removed by the host.' }); } catch (_) {}
-        try { c.conn.close(); } catch (_) {}
+        try { ws.send(JSON.stringify({ type: 'kick', to: c.connId, reason: 'You were removed by the host.' })); } catch (_) {}
         connections.splice(idx, 1);
         refreshLobby();
       });
@@ -3496,53 +3459,63 @@ function showHostLobby(peer, peerId, hostName) {
   }
   refreshLobby();
 
-  peer.on('connection', (conn) => {
-    if (state) { conn.on('open', () => { conn.send({ type: 'reject', reason: 'Game already started' }); setTimeout(() => conn.close(), 200); }); return; }
-    if (connections.length >= 4) {
-      conn.on('open', () => { conn.send({ type: 'reject', reason: 'Room is full (5 players max)' }); setTimeout(() => conn.close(), 200); });
+  ws.addEventListener('message', (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch (_) { return; }
+    if (msg.type === 'clientJoined') {
+      // We'll wait for their hello before adding them to the lobby.
       return;
     }
-    conn.on('open', () => {
-      attachHeartbeat(conn, `client(${conn.peer})`);
-      conn.on('data', (data) => {
-        if (!data) return;
-        if (data.type === 'hello') {
-          connections.push({ conn, name: (String(data.name || 'Player')).slice(0, 16) });
-          try { conn.send({ type: 'welcome' }); } catch (_) {}
-          refreshLobby();
-        } else if (data.type === 'move' && state && data.playerId != null) {
-          applyMove(data.move, data.playerId);
+    if (msg.type === 'clientLeft') {
+      const idx = connections.findIndex(c => c.connId === msg.connId);
+      if (idx >= 0) {
+        const lost = connections[idx];
+        connections.splice(idx, 1);
+        refreshLobby();
+        if (state && lost.playerId != null) {
+          console.warn(`[host] ${lost.name} disconnected mid-game (player ${lost.playerId})`);
         }
-      });
-      conn.on('close', () => {
-        const idx = connections.findIndex(c => c.conn === conn);
-        if (idx >= 0) {
-          const lost = connections[idx];
-          connections.splice(idx, 1);
-          refreshLobby();
-          if (state && lost.playerId != null) {
-            console.warn(`[host] ${lost.name} disconnected mid-game (player ${lost.playerId})`);
-            // Game keeps going — their slot is still on the table, just won't act.
-          }
-        }
-      });
-      conn.on('error', (err) => {
-        console.warn('[host] connection error', err);
-      });
-    });
+      }
+      return;
+    }
+    // Forwarded message from a client. `from` = the client's connId.
+    if (msg.from == null) return;
+    if (msg.type === 'hello') {
+      if (state) { sendTo(msg.from, { type: 'reject', reason: 'Game already started' }); return; }
+      if (connections.length >= 4) {
+        sendTo(msg.from, { type: 'reject', reason: 'Room is full (5 players max)' });
+        return;
+      }
+      connections.push({ connId: msg.from, name: (String(msg.name || 'Player')).slice(0, 16) });
+      sendTo(msg.from, { type: 'welcome' });
+      refreshLobby();
+    } else if (msg.type === 'move' && state && msg.playerId != null) {
+      // Sanity: ensure the move is for the player slot this client was assigned, so
+      // a confused or malicious client can't act for someone else.
+      const c = connections.find(c => c.connId === msg.from);
+      if (!c || c.playerId !== msg.playerId) {
+        console.warn('[host] move from wrong player', msg);
+        return;
+      }
+      applyMove(msg.move, msg.playerId);
+    }
+  });
+  ws.addEventListener('close', (ev) => {
+    console.warn('[host] relay socket closed', ev.code, ev.reason);
+    if (state) {
+      const banner = document.createElement('div');
+      banner.className = 'disconnect-banner';
+      banner.textContent = '⚠ Lost connection to the game relay. Refresh to start a new game.';
+      document.body.appendChild(banner);
+    }
   });
 
   net = {
-    cleanup() {
-      connections.forEach(c => { try { c.conn.close(); } catch (e) {} });
-      try { peer.destroy(); } catch (e) {}
-    },
+    cleanup() { try { ws.close(); } catch (e) {} },
     broadcastState() {
       connections.forEach(c => {
         if (c.playerId == null) return;
-        try {
-          c.conn.send({ type: 'state', state: serializeStateFor(state, c.playerId) });
-        } catch (e) { console.warn('broadcast failed', e); }
+        sendTo(c.connId, { type: 'state', state: serializeStateFor(state, c.playerId) });
       });
     },
   };
@@ -3557,10 +3530,7 @@ function showHostLobby(peer, peerId, hostName) {
     selected     = [];
     swapSelected = { hand: null, faceUp: null };
 
-    // Tell each client which player they are
-    connections.forEach(c => {
-      try { c.conn.send({ type: 'assign', playerId: c.playerId }); } catch (e) {}
-    });
+    connections.forEach(c => sendTo(c.connId, { type: 'assign', playerId: c.playerId }));
 
     $('lobby').classList.remove('active');
     $('table').classList.add('active');
@@ -3578,13 +3548,11 @@ function buildJoinConfig(cfg) {
     <button class="primary" id="cfg-join">Join</button>
     <div id="join-status" class="muted" style="margin-top:10px;font-size:13px;"></div>
   `;
-  $('cfg-join').addEventListener('click', async () => {
-    const btn = $('cfg-join');
-    const prevText = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Loading…';
-    try { await loadPeerJS(); }
-    catch (_) { btn.disabled = false; btn.textContent = prevText; return alert('PeerJS failed to load. Check your network.'); }
-    btn.disabled = false; btn.textContent = prevText;
+  $('cfg-join').addEventListener('click', () => {
+    if (!relayConfigured()) {
+      alert("Online play needs a relay server. Deploy the worker in /relay (see relay/README.md) and set RELAY_URL in shithead.js.");
+      return;
+    }
     const name = ($('cfg-name').value.trim() || 'Player').slice(0, 16);
     const code = $('cfg-code').value.trim();
     if (!code) return alert('Enter a room code first.');
@@ -3595,100 +3563,102 @@ function buildJoinConfig(cfg) {
 function joinRoom(roomId, myName) {
   $('cfg-join').disabled = true;
   $('cfg-join').textContent = 'Joining…';
-  $('join-status').textContent = 'Connecting to broker…';
+  $('join-status').textContent = 'Connecting to relay…';
 
-  const peer = new Peer(undefined, PEER_CONFIG);
-  let dataConn = null;
-
-  peer.on('open', () => {
-    $('join-status').textContent = 'Connecting to host…';
-    const conn = peer.connect(roomId, { reliable: true });
-    dataConn = conn;
-    let connectTimeout = setTimeout(() => {
-      $('join-status').textContent = 'Connection timed out. The host may not be online — check the link and try again.';
-      try { conn.close(); } catch (e) {}
-      try { peer.destroy(); } catch (e) {}
-      $('cfg-join').disabled = false;
-      $('cfg-join').textContent = 'Join';
-    }, 15000);
-
-    let welcomeTimeout = null;
-
-    conn.on('open', () => {
-      clearTimeout(connectTimeout);
-      $('join-status').textContent = 'Connected. Saying hello…';
-      attachHeartbeat(conn, 'host');
-      try { conn.send({ type: 'hello', name: myName }); } catch (e) {
-        $('join-status').textContent = 'Could not send hello: ' + (e.message || e);
-      }
-      welcomeTimeout = setTimeout(() => {
-        $('join-status').textContent = "Connected but the host didn't acknowledge. They might still be loading — wait a moment, or refresh and try again.";
-      }, 8000);
-      conn.on('data', (data) => {
-        if (!data) return;
-        if (data.type === 'reject') {
-          clearTimeout(welcomeTimeout);
-          alert('Rejected: ' + data.reason);
-          try { peer.destroy(); } catch (e) {}
-          $('cfg-join').disabled = false;
-          $('cfg-join').textContent = 'Join';
-        } else if (data.type === 'welcome') {
-          clearTimeout(welcomeTimeout);
-          $('join-status').textContent = 'In the lobby. Waiting for the host to start the game…';
-        } else if (data.type === 'assign') {
-          myPlayerId = data.playerId;
-        } else if (data.type === 'state') {
-          state = deserializeStateForClient(data.state);
-          $('lobby').classList.remove('active');
-          $('table').classList.add('active');
-          syncActionLogFromState();
-          renderTable();
-          if (state.phase === 'over') showGameOver();
-        }
-      });
-    });
-    conn.on('error', (e) => {
-      console.warn('[join] conn error', e);
-      $('join-status').textContent = 'Error: ' + (e.message || e.type || e);
-    });
-    conn.on('close', () => {
-      clearTimeout(connectTimeout);
-      clearTimeout(welcomeTimeout);
-      if (state) {
-        $('join-status').textContent = 'Lost connection to host.';
-        // Show a banner at the top of the table.
-        const banner = document.createElement('div');
-        banner.className = 'disconnect-banner';
-        banner.textContent = '⚠ Disconnected from host. Refresh the page to rejoin.';
-        document.body.appendChild(banner);
-      } else {
-        $('join-status').textContent = 'Disconnected from host before the game started.';
-        $('cfg-join').disabled = false;
-        $('cfg-join').textContent = 'Join';
-      }
-    });
-
-    net = {
-      cleanup() { try { conn.close(); } catch (e) {} try { peer.destroy(); } catch (e) {} },
-      sendToHost(msg) { try { conn.send(msg); } catch (e) { console.warn('sendToHost failed', e); } },
-      broadcastState() {},
-    };
-  });
-  peer.on('disconnected', () => {
-    console.warn('[join] disconnected from broker — attempting reconnect');
-    try { peer.reconnect(); } catch (_) {}
-  });
-  peer.on('error', (err) => {
-    const msg = (err && (err.type === 'peer-unavailable'))
-      ? "Couldn't find that room. The host may have closed their tab, or the code/link is wrong."
-      : 'Network error: ' + (err.message || err.type || err);
-    $('join-status').textContent = msg;
-    console.error('[join] peer error', err);
+  let ws;
+  try {
+    ws = new WebSocket(`${RELAY_URL}/room/${encodeURIComponent(roomId)}?role=join`);
+  } catch (e) {
     $('cfg-join').disabled = false;
     $('cfg-join').textContent = 'Join';
-  });
-}
+    return alert("Couldn't open WebSocket: " + (e.message || e));
+  }
 
+  let opened = false;
+  const connectTimeout = setTimeout(() => {
+    if (!opened) {
+      $('join-status').textContent = "Couldn't connect — relay may be down or blocking your network.";
+      try { ws.close(); } catch (e) {}
+      $('cfg-join').disabled = false;
+      $('cfg-join').textContent = 'Join';
+    }
+  }, 10000);
+  let welcomeTimeout = null;
+
+  ws.addEventListener('open', () => {
+    opened = true;
+    clearTimeout(connectTimeout);
+    $('join-status').textContent = 'Connected. Saying hello…';
+    try { ws.send(JSON.stringify({ type: 'hello', name: myName })); }
+    catch (e) { $('join-status').textContent = 'Could not send hello: ' + (e.message || e); }
+    welcomeTimeout = setTimeout(() => {
+      $('join-status').textContent = "Connected but the host didn't acknowledge. They might still be loading — wait a moment, or refresh and try again.";
+    }, 8000);
+  });
+
+  ws.addEventListener('message', (ev) => {
+    let data;
+    try { data = JSON.parse(ev.data); } catch (_) { return; }
+    if (data.type === 'reject' || data.type === 'kicked') {
+      clearTimeout(welcomeTimeout);
+      alert((data.type === 'kicked' ? 'Removed: ' : 'Rejected: ') + (data.reason || ''));
+      try { ws.close(); } catch (e) {}
+      $('cfg-join').disabled = false;
+      $('cfg-join').textContent = 'Join';
+    } else if (data.type === 'welcome') {
+      clearTimeout(welcomeTimeout);
+      $('join-status').textContent = 'In the lobby. Waiting for the host to start the game…';
+    } else if (data.type === 'assign') {
+      myPlayerId = data.playerId;
+    } else if (data.type === 'state') {
+      state = deserializeStateForClient(data.state);
+      $('lobby').classList.remove('active');
+      $('table').classList.add('active');
+      syncActionLogFromState();
+      renderTable();
+      if (state.phase === 'over') showGameOver();
+    } else if (data.type === 'hostLeft') {
+      // Host disconnected — relay will close us next, but show a clear banner now.
+      if (state) {
+        const banner = document.createElement('div');
+        banner.className = 'disconnect-banner';
+        banner.textContent = '⚠ Host left the game. Refresh to rejoin or start a new one.';
+        document.body.appendChild(banner);
+      }
+    }
+  });
+  ws.addEventListener('error', (err) => {
+    console.warn('[join] websocket error', err);
+  });
+  ws.addEventListener('close', (ev) => {
+    clearTimeout(connectTimeout);
+    clearTimeout(welcomeTimeout);
+    if (!opened) {
+      $('join-status').textContent = 'Could not connect to the relay (' + (ev.reason || `code ${ev.code}`) + '). Check your room code and try again.';
+      $('cfg-join').disabled = false;
+      $('cfg-join').textContent = 'Join';
+    } else if (state) {
+      $('join-status').textContent = 'Lost connection to the relay.';
+      const banner = document.createElement('div');
+      banner.className = 'disconnect-banner';
+      banner.textContent = '⚠ Disconnected. Refresh the page to rejoin.';
+      document.body.appendChild(banner);
+    } else {
+      $('join-status').textContent = 'Disconnected before the game started. ' + (ev.reason || '');
+      $('cfg-join').disabled = false;
+      $('cfg-join').textContent = 'Join';
+    }
+  });
+
+  net = {
+    cleanup() { try { ws.close(); } catch (e) {} },
+    sendToHost(msg) {
+      try { ws.send(JSON.stringify(msg)); }
+      catch (e) { console.warn('sendToHost failed', e); }
+    },
+    broadcastState() {},
+  };
+}
 // Redact other players' hands & face-down values for a given viewer
 function serializeStateFor(s, viewerId) {
   return {

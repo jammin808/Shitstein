@@ -19,7 +19,7 @@ Plus a few house rules (see below).
 
 - **vs Bots** — 2–5 players, simulated opponents with their own personalities.
 - **Pass & Play** — local hot-seat for 2–5 humans on one device.
-- **Host Online / Join Online** — peer-to-peer over WebRTC via PeerJS. Host gets a room code, players paste it in. No backend, no accounts.
+- **Host Online / Join Online** — clients connect through a small WebSocket relay (Cloudflare Worker + Durable Object, see [`relay/`](relay/)). Host gets a 5-character room code, players paste it in. No accounts. Origin-pinned relay so random pages can't open rooms on your worker.
 
 ## Special cards
 
@@ -51,4 +51,4 @@ Common Shithead variants that are **not** in play: 8 = invisible, 3 = mirror. (S
 - `index.html` + `styles.css` — felt-table layout with hand-crafted SVG cards.
 - `images/felt.webp` — Canva-generated emerald linen-weave texture (downscaled + WebP-compressed from the original PNG).
 - `music/` — drop royalty-free MP3s here for in-game background music (auto-detected, with a topbar toggle to flip between your tracks and the built-in synth chiptune). See [music/README.md](music/README.md) for details.
-- WebRTC peer-to-peer multiplayer via [PeerJS](https://peerjs.com).
+- `relay/` — Cloudflare Worker + Durable Object that fans WebSocket messages between online players. See [relay/README.md](relay/README.md) for the (one-off) deploy.
