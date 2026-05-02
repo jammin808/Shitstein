@@ -1218,8 +1218,19 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
   const cards = indices.map(i => pool[i]);
   const lead  = cards[0];
 
+  // House rule: 4-of-a-kind from HAND plays as a wild burn-bomb (like a 10 lead) —
+  // it ignores the normal lead-on-top suit/rank rules and sails through the pickup
+  // chain whitelist (the 4-of-a-kind on top will trigger the burn handler below
+  // and reset chain to 0). Doesn't bypass the pendingSkips lock — only 8s break a
+  // skip queue, matching 10's behaviour. Source must be hand (face-up only ever
+  // holds 3 cards in this game).
+  const isFourOfKindHand = source === 'hand'
+    && cards.length === 4
+    && cards.every(c => c.rank === lead.rank)
+    && state.pendingSkips === 0;
+
   // ---- Validation ----
-  if (!canPlayCard(lead, state)) {
+  if (!isFourOfKindHand && !canPlayCard(lead, state)) {
     if (state.pickupChain > 0) {
       return { ok: false, error: `pickup chain at +${state.pickupChain} — play a 2, a black Jack, or a red Jack (if a black Jack is pending), or take the cards` };
     }
@@ -1245,8 +1256,9 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
   // While a pickup chain is active, the WHOLE play must be chain-relevant — 2s, Jacks
   // (any colour), or a 10. 10 burns the pile chain-and-all. (8 was briefly allowed
   // during a chain but the rule has been reverted: 8 cannot go when the pickup chain
-  // is not empty.)
-  if (state.pickupChain > 0) {
+  // is not empty.) 4-of-a-kind from hand bypasses this whitelist entirely — the
+  // burn that fires when all four hit the discard clears the chain.
+  if (state.pickupChain > 0 && !isFourOfKindHand) {
     for (const c of cards) {
       if (c.rank === '2' || c.rank === '10' || isJackBlack(c) || isJackRed(c)) continue;
       return { ok: false, error: 'during a pickup chain, only 2s, Jacks, or a 10 may be played' };
@@ -2554,7 +2566,19 @@ function selectionOrder(source, idx) {
   return 0;
 }
 function canSelect(source, card) {
-  if (selected.length === 0) return canPlayCard(card, state);
+  if (selected.length === 0) {
+    if (canPlayCard(card, state)) return true;
+    // House rule: a player can start a play with any HAND card if they hold all four
+    // of that rank — the combined 4-of-a-kind plays on anything (like a 10) and
+    // burns the pile. Doesn't apply during a pending-skip lock (only 8s play through
+    // a skip queue), to match a 10's behaviour.
+    if (source === 'hand' && state.pendingSkips === 0) {
+      const me0 = state.players[myPlayerId];
+      const sameRank = me0.hand.filter(c => c.rank === card.rank).length;
+      if (sameRank >= 4) return true;
+    }
+    return false;
+  }
   const me = state.players[myPlayerId];
   const first = selected[0];
   if (first.source !== source) return false;

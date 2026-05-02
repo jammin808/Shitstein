@@ -33,7 +33,7 @@ Plus a few house rules (see below).
 | **Q** | Reverse + lock. Plays on another Q or in suit. Once on top, only Q / 2 / 10 / A / higher-same-suit may follow. |
 | **K** | Royal demand. Plays on another K or in suit. Cannot follow a freshly-placed 2 / 8 / J — the previous player must have had a turn to react. **A K of any suit plays on a red Jack once the pickup chain is empty** (the RJ has done its cancel job). **Any play that ends on a K draws +1 from the deck** — solo K, or a chain ending on K (e.g. Q♠ → K♠). The player should have followed on (K-chain extension lets a same-suit card or another K chain after a K). No penalty when the deck is empty or the K burns as part of a 4-of-a-kind. |
 | **A** | Wild. Blocked only when the chain card on top is **fresh** — a freshly-placed 2 (until the chain is taken), or a freshly-placed black Jack while the deck still has cards. Once a turn has passed without that card being played on (the next player took the chain, was skipped, etc.) the 2 / black J becomes a stale "guide" and Ace plays normally on it. Always blocked after an 8 (skip-lock). Plays on a red Jack always. Names the suit the next player must follow. |
-| **4 of a kind** | Burns the pile (any rank, including specials). |
+| **4 of a kind** | Burns the pile (any rank, including specials). **A 4-of-a-kind held in hand can be selected as a combined play and led on anything** — it's wild like a 10, plays straight onto any top card and through any pickup chain, and burns the pile when all four hit the discard. (Skip-lock still wins — only 8s play through a pending skip.) |
 
 ### House rules
 
