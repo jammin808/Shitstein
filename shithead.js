@@ -2008,6 +2008,28 @@ function renderCard(card, opts = {}) {
 }
 
 // --------- main render ---------
+// Track which play we've already animated so the entrance class is only added on the
+// render for a NEW play — re-renders during the same play (e.g. hand sort, idle ticks)
+// don't retrigger card-land. Reset to null on any state change that wipes lastPlayCards.
+let _lastFreshPlayKey = null;
+function _currentPlayKey() {
+  if (!state || !state.lastPlayCards || !state.lastPlayCards.length) return null;
+  return state.lastPlayCards.map(c => c.rank + c.suit).join(',') + ':' + state.discard.length;
+}
+function _fxClassForLastCard() {
+  if (!state || !state.lastPlayCards || !state.lastPlayCards.length) return null;
+  const last = state.lastPlayCards[state.lastPlayCards.length - 1];
+  if (!last) return null;
+  if (last.rank === '2')  return 'fx-2';
+  if (last.rank === '7')  return 'fx-7';
+  if (last.rank === '8')  return 'fx-8';
+  if (last.rank === 'Q')  return 'fx-Q';
+  if (last.rank === 'K')  return 'fx-K';
+  if (last.rank === 'A')  return 'fx-A';
+  if (last.rank === 'J')  return (last.suit === 'S' || last.suit === 'C') ? 'fx-Jblack' : 'fx-Jred';
+  return null;
+}
+
 function renderTable() {
   if (!state) return;
   const me = state.players[myPlayerId];
@@ -2062,7 +2084,15 @@ function renderTable() {
   }
 
   // ---- Discard ----
+  // Gate the rebuild on a play-key so re-renders for the SAME play (clicks, sort changes,
+  // idle ticks) leave the existing card in the DOM untouched — its entrance animation runs
+  // to completion instead of being yanked back to keyframe-0 by a fresh innerHTML wipe.
+  // The key only changes when a genuinely new play hits the discard, the pile burns, or
+  // someone picks up. The data-attribute lives on discardEl itself so it's never wiped.
   const discardEl = $('discard');
+  const discardKey = (_currentPlayKey() || ('empty:' + state.discard.length));
+  if (discardEl.dataset.discardKey !== discardKey) {
+  discardEl.dataset.discardKey = discardKey;
   discardEl.innerHTML = '';
   const top = topDiscard(state);
   if (top) {
@@ -2107,7 +2137,19 @@ function renderTable() {
       discardEl.appendChild(fan);
     } else {
       discardEl.classList.remove('has-fan');
-      discardEl.appendChild(renderCard(top));
+      const topCardEl = renderCard(top);
+      // For a brand-new single-card play, attach .fresh (+ any fx-* class) at DOM-creation
+      // time so the entrance animation property is on the element from its first paint.
+      // Applying these classes AFTER insertion (the old postMoveProcessing path) caused a
+      // brief paint at "landed" state followed by the animation jumping to keyframe-0 and
+      // playing — i.e. the card appearing twice within milliseconds.
+      const playKey = _currentPlayKey();
+      if (playKey && playKey !== _lastFreshPlayKey) {
+        topCardEl.classList.add('fresh');
+        const fxCls = _fxClassForLastCard();
+        if (fxCls) topCardEl.classList.add(fxCls);
+      }
+      discardEl.appendChild(topCardEl);
     }
     const cnt = document.createElement('div');
     cnt.className = 'pile-count';
@@ -2120,6 +2162,8 @@ function renderTable() {
     e.textContent = 'discard';
     discardEl.appendChild(e);
   }
+  } // end if (discardKey changed)
+  _lastFreshPlayKey = _currentPlayKey();
 
   // ---- Turn indicator ----
   const turnLabel = $('turn-indicator');
@@ -2649,21 +2693,16 @@ function postMoveProcessing() {
   if (tags.includes('skip'))       Sound.sfx('skip');
   if (tags.includes('chainTaken')) Sound.sfx('take');
   if (tags.includes('reverse'))    Sound.sfx('reverse');
-  // Mark the freshly-played top card so it animates in. For a chain fan the topmost card
-  // is the LAST .card in DOM order (it has the highest z-index); for a single play it's
-  // the only card. We skip the .fresh / card-class entrance on fan cards because the
-  // .fan-card class already runs fan-card-land with the right delay; layering .fresh on
-  // top would replace fan-card-land with card-land and (without backwards fill-mode)
-  // cause the topmost card to flash in twice.
+  // The card-entrance classes (.fresh and any .fx-* for specials) are now applied INSIDE
+  // renderTable at DOM-creation time on the rendered top card — that's what eliminates the
+  // double-pop where the card painted briefly at "landed" state before the animation could
+  // jump it back to keyframe-0. Here we just need the audio + floating stamp side effects.
   const allDiscardCards = document.querySelectorAll('#discard .card');
   const topCard = allDiscardCards[allDiscardCards.length - 1];
   if (topCard) {
-    const isFanCard = topCard.classList.contains('fan-card');
-    if (!isFanCard) {
-      topCard.classList.add('fresh');
-      setTimeout(() => topCard.classList.remove('fresh'), 320);
-    }
-    playSpecialCardFX(topCard, { skipCardClass: isFanCard });
+    // Skip the card-class re-add (renderTable already did it) — playSpecialCardFX still
+    // emits the +2/king/etc floating stamp and the special-card sfx.
+    playSpecialCardFX(topCard, { skipCardClass: true });
   }
   maybeShowReactions();
   Idle.syncWithState();
