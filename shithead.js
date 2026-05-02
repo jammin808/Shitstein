@@ -2297,10 +2297,13 @@ function renderTable() {
       // Linear lerp: 0 at N=2, 1 at N=6+. Past N=6 we stay at the 85% cap.
       const t = Math.max(0, Math.min((N - 2) / 4, 1));
       let overlap = minOverlap + (maxOverlap - minOverlap) * t;
-      // Also cap by available leftward space inside the play panel (the gap between
-      // the discard slot's left edge and the direction-arrow's right edge). Once the
-      // deck is gone its slot is hidden, freeing ~160 px more, so the fan can spread.
-      const maxExtensionPx = (state.deck.length === 0) ? 240 : 80;
+      // Cap the leftward extension so the fan never reaches the deck/arrow column
+      // on the left of .middle. The discard is right-justified in its grid cell with
+      // a 24 px margin, so on a typical viewport the fan has ~360 px of clear space
+      // before it would reach the deck column. When the deck is gone the column is
+      // still reserved (so the layout doesn't lurch), but the fan can creep a bit
+      // closer because the arrow alone is narrower than the deck.
+      const maxExtensionPx = (state.deck.length === 0) ? 420 : 360;
       const cardWPx = (function () {
         const m = getComputedStyle(discardEl).getPropertyValue('--card-w').trim();
         const v = parseFloat(m);

@@ -382,23 +382,30 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 .opponent-stacks { display: flex; gap: 4px; margin-top: 8px; min-height: 60px; }
 .opponent-hand { display: flex; gap: 2px; margin-top: 4px; }
 
-/* ======================= MIDDLE ROW ======================= */
+/* ======================= MIDDLE ROW =======================
+   Two-column grid: a fixed-width LEFT column stacks the (smaller) deck above the
+   direction arrow, and the discard pile occupies the entire RIGHT column. Pinning
+   the discard to the right of its cell hands the rest of the row over to the
+   chain fan, which extends LEFT from the discard slot. The fixed left-column
+   width keeps the layout stable when the deck collapses (deck-empty mode just
+   fades the deck out — the column itself doesn't reflow). */
 .middle {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 32px;
+  row-gap: 10px;
   align-items: center;
-  gap: 32px;
   margin: 22px 0 18px;
   position: relative;
-  min-height: 140px;
+  min-height: 224px;
 }
-/* (Removed the ambient ::before glow that extended 50 px below .middle. With me-area's
-   semi-transparent background sitting beneath, the glow showed through and looked like
-   a hazy gap between the play panel and the me-area below. The play panel's own inset
-   shadow + gold border already give it visual weight.) */
-/* The deck and discard pile are slightly bigger than hand cards so the "shared table"
-   reads as more important than your private hand. The size cascades to descendant .card
-   nodes via the --card-w / --card-h custom properties. */
+.middle > #deck            { grid-column: 1; grid-row: 1; justify-self: center; align-self: center; }
+.middle > #direction-arrow { grid-column: 1; grid-row: 2; justify-self: center; align-self: start; }
+.middle > #discard         { grid-column: 2; grid-row: 1 / span 2; justify-self: end; align-self: center; margin-right: 24px; }
+
+/* The deck and discard pile cascade --card-w / --card-h to their descendant .card
+   so the SVG inside renders at pile size by default. */
 .deck, .discard {
   --card-w: var(--pile-card-w);
   --card-h: var(--pile-card-h);
@@ -406,25 +413,27 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   height: var(--pile-card-h);
   position: relative;
 }
-/* The deck slot animates its width / opacity / translation rather than display:none
-   so we get a smooth slide-out when the last deck card is drawn. */
-.deck {
+/* Deck is now visually subordinate to the discard pile — smaller, set off to the
+   left as a "draw stack" rather than a co-equal slot. Higher specificity wins
+   over the .deck, .discard combined rule above. */
+.middle .deck {
+  --card-w: 110px;
+  --card-h: 154px;
+  width: 110px;
+  height: 154px;
+}
+/* When the deck runs dry, fade + scale it out. The grid column stays its fixed
+   130px so nothing shifts — the arrow stays exactly where it is and the discard
+   slot doesn't lurch. */
+.middle .deck {
   transition:
-    opacity 0.45s cubic-bezier(0.34, 1.2, 0.64, 1),
-    transform 0.45s cubic-bezier(0.34, 1.2, 0.64, 1),
-    width 0.45s cubic-bezier(0.34, 1.2, 0.64, 1),
-    margin-right 0.45s cubic-bezier(0.34, 1.2, 0.64, 1);
+    opacity 0.4s cubic-bezier(0.34, 1.2, 0.64, 1),
+    transform 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
 }
 .middle.deck-empty .deck {
   opacity: 0;
-  transform: translateX(-32px) scale(0.92);
-  width: 0;
-  /* Eat the .middle flex `gap: 32px` between the (now-collapsed) deck and the arrow,
-     so the arrow naturally slides into the slot the deck used to occupy and the
-     discard gets the freed horizontal room for chain fans. */
-  margin-right: -32px;
+  transform: scale(0.85);
   pointer-events: none;
-  overflow: hidden;
 }
 
 /* When the most recent play was a chain, the discard slot fans the cards out to the LEFT
@@ -1364,7 +1373,14 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .brand-word { font-size: 22px; }
   .opponents { gap: 10px; }
   .opponent { min-width: 190px; padding: 10px; }
-  .middle { gap: 26px; margin: 18px 0 14px; }
+  .middle {
+    grid-template-columns: 120px 1fr;
+    column-gap: 26px;
+    row-gap: 8px;
+    margin: 18px 0 14px;
+  }
+  .middle .deck { --card-w: 100px; --card-h: 140px; width: 100px; height: 140px; }
+  .middle > #discard { margin-right: 16px; }
   .action-bar { padding: 10px 14px; gap: 10px; max-width: 760px; }
   .action-btn { font-size: 15px; padding: 12px 18px; min-width: 130px; }
   .action-log { width: 220px; font-size: 12px; top: 70px; right: 10px; }
@@ -1421,7 +1437,18 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   .opponent-counts { font-size: 11px; }
   .opponent-stacks { min-height: 42px; }
 
-  .middle { gap: 14px; margin: 18px 0 14px; min-height: 92px; }
+  .middle {
+    /* Mobile: keep the new two-row grid but tighten everything. The deck shrinks to a
+       compact 90×126 stack on the left, and the discard column has less right margin
+       so the fan still gets useful leftward space on small screens. */
+    grid-template-columns: 100px 1fr;
+    column-gap: 14px;
+    row-gap: 8px;
+    margin: 18px 0 14px;
+    min-height: 196px;
+  }
+  .middle .deck { --card-w: 90px; --card-h: 126px; width: 90px; height: 126px; }
+  .middle > #discard { margin-right: 8px; }
   .turn-indicator { top: -26px; font-size: 12px; }
   .pile-count { bottom: -18px; font-size: 11px; }
   .direction-glyph { font-size: 32px; }
