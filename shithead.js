@@ -1057,14 +1057,14 @@ function canPlayCard(card, state) {
     return card.suit === matchSuit;
   }
   // K-card rule: a King can only be played on another King or in suit. Additionally, a K cannot
-  // play on a freshly-placed 8 or Jack — the previous player must have had a turn between the
-  // 8/J landing and now (i.e., they took the chain, were skipped, etc.). For a freshly-placed
-  // 2 the rule is relaxed: a SAME-SUIT K is allowed (the suit-match still rules out cross-suit
-  // Kings, so the same-suit return at the bottom carries that case).
+  // play on a freshly-placed 2 / 8 / Jack — the previous player must have had a turn between
+  // that card landing and now (i.e., they took the chain, were skipped, etc.). The mid-chain
+  // case (K immediately after a 2 in a multi-card play) is already blocked by chainStep —
+  // K and 2 are 11 ranks apart so the same-suit ±1 check fails.
   if (card.rank === 'K') {
     if (top.rank === 'K') return true;
     const fresh = state.turnCount === (state.topPlayedAtTurn + 1);
-    if (fresh && (top.rank === '8' || top.rank === 'J')) return false;
+    if (fresh && (top.rank === '2' || top.rank === '8' || top.rank === 'J')) return false;
     return card.suit === matchSuit;
   }
   // Jack rule: J plays only on another Jack, or higher rank in the same suit (any gap).
