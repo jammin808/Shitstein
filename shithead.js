@@ -226,7 +226,6 @@ const Sound = (() => {
     deselect:       () => blip(440, 0.03, 'square', 0.08),
     newgame:        () => blipSeq([[262, 0.10], [330, 0.10], [392, 0.10], [523, 0.20]], 'square', 0.25),
     gameover:       () => blipSeq([[523, 0.20], [494, 0.20], [440, 0.40]], 'square', 0.30),
-    reaction:       () => blip(880, 0.04, 'triangle', 0.15),
     sort:           () => blip(659, 0.03, 'triangle', 0.10),
     'special-2':      () => blipSeq([[523, 0.05], [659, 0.06], [784, 0.06]], 'square', 0.25),
     'special-7':      () => blipSeq([[392, 0.06], [330, 0.06], [262, 0.08]], 'triangle', 0.25),
@@ -2382,9 +2381,8 @@ function renderTable() {
   // ---- Me header ----
   $('me-label').textContent = `${me.name}${(state.current === myPlayerId && state.phase === 'play') ? ' — your turn' : ''}`;
   const myActive = getActiveSource(me, state);
-  // The full per-play guidance lives in the play-hint banner above the action bar (its own
-  // dedicated row, so reaction bubbles can never land on top of the text). The me-hint span
-  // stays in the header for short status text only.
+  // The full per-play guidance lives in the play-hint banner above the action bar; the
+  // me-hint span stays in the header for short status text only.
   const playHint = $('play-hint');
   if (playHint) playHint.textContent = buildActionHint(state, myPlayerId, myActive);
   const meHint = $('me-hint');
@@ -2949,7 +2947,6 @@ function postMoveProcessing() {
     // emits the +2/king/etc floating stamp and the special-card sfx.
     playSpecialCardFX(topCard, { skipCardClass: true });
   }
-  maybeShowReactions();
   Idle.syncWithState();
 
   if (state.phase === 'over') { showGameOver(); return; }
@@ -3019,162 +3016,6 @@ function botTurn() {
     if (move.aceSuit) m.aceSuit = move.aceSuit;
     applyMove(m, cur.id);
   }
-}
-
-// --------- reactions / banter ---------
-const REACTIONS = {
-  burn: [
-    { emoji: '🔥', text: 'Absolute weapon!' },
-    { emoji: '🔥', text: 'Cheeky bugger.' },
-    { emoji: '🥵', text: 'Oof, you\'ve done it now.' },
-    { emoji: '😤', text: 'Show off, you.' },
-    { emoji: '👏', text: 'Cracking play.' },
-    { emoji: '😬', text: 'That\'s gonna sting someone.' },
-  ],
-  fourOfKind: [
-    { emoji: '🎯', text: 'Have it!' },
-    { emoji: '🤯', text: 'FOUR of them?! Pack it in.' },
-    { emoji: '👀', text: 'Where you been hiding those?' },
-    { emoji: '🥳', text: 'Absolute scenes.' },
-    { emoji: '💅', text: 'Cool as a cucumber.' },
-  ],
-  pickUp: [
-    { emoji: '📦', text: 'Bin lorry has arrived.' },
-    { emoji: '🤣', text: 'Absolute meltdown.' },
-    { emoji: '😬', text: 'Painful, that.' },
-    { emoji: '🥲', text: 'Bless your cotton socks.' },
-    { emoji: '🪣', text: 'Bucket-bound, you.' },
-    { emoji: '🤡', text: 'Clown energy.' },
-    { emoji: '🥴', text: 'Yikes, mate.' },
-    { emoji: '🫠', text: 'Just melt away then.' },
-    { emoji: '🐌', text: 'Take your time, love.' },
-  ],
-  soloKing: [
-    { emoji: '👑', text: 'Royal mug.' },
-    { emoji: '🤴', text: 'Crowned a numpty.' },
-    { emoji: '🤦', text: 'Unforced error, sire.' },
-    { emoji: '😭', text: 'King without a court.' },
-    { emoji: '🪙', text: 'Pay the toll, your majesty.' },
-  ],
-  skip: [
-    { emoji: '💤', text: 'Night night.' },
-    { emoji: '😴', text: 'Off to bed with you.' },
-    { emoji: '🚪', text: 'Sit this one out.' },
-    { emoji: '🤐', text: 'Hush now.' },
-    { emoji: '🙊', text: 'Quiet, you.' },
-  ],
-  reverse: [
-    { emoji: '🔄', text: 'Plot twist!' },
-    { emoji: '😏', text: 'Oh do behave.' },
-    { emoji: '🙃', text: 'Topsy-turvy now.' },
-    { emoji: '🌀', text: 'Right, that\'ll throw a spanner in.' },
-  ],
-  finished: [
-    { emoji: '🏆', text: 'Top of the class.' },
-    { emoji: '👏', text: 'Get in!' },
-    { emoji: '😎', text: 'Smug, but earned.' },
-    { emoji: '🍾', text: 'Crack open the bubbles.' },
-    { emoji: '🫡', text: 'Salute.' },
-  ],
-  blindGood: [
-    { emoji: '🎲', text: 'Jammy git.' },
-    { emoji: '🍀', text: 'Born lucky, you.' },
-    { emoji: '😏', text: 'Suspiciously lucky.' },
-    { emoji: '🎯', text: 'Surgical, that.' },
-  ],
-  blindBad: [
-    { emoji: '💀', text: 'Tragic.' },
-    { emoji: '🪦', text: 'RIP your dignity.' },
-    { emoji: '🥹', text: 'Aw, mate.' },
-    { emoji: '😬', text: 'That\'s grim viewing.' },
-    { emoji: '🤕', text: 'Ouch. Painful.' },
-  ],
-  reset: [
-    { emoji: '🦥', text: 'Booooring.' },
-    { emoji: '🥱', text: 'Stalling, are we?' },
-    { emoji: '🚪', text: 'Reset deployed.' },
-    { emoji: '😒', text: 'Real safe play.' },
-  ],
-  chainAdd: [
-    { emoji: '📤', text: 'Right, that\'s yours, that.' },
-    { emoji: '😈', text: 'Stack \'em up.' },
-    { emoji: '🪤', text: 'Trap set, cheers.' },
-    { emoji: '🥷', text: 'Devious.' },
-    { emoji: '🃏', text: 'Take that, mate.' },
-  ],
-  chainCancel: [
-    { emoji: '✋', text: 'Hold up — red Jack saves the day.' },
-    { emoji: '🛡️', text: 'Defended like a champ.' },
-    { emoji: '😏', text: 'Nice escape, weasel.' },
-    { emoji: '🪄', text: 'Vanished, just like that.' },
-  ],
-  chainTaken: [
-    { emoji: '😩', text: 'Oof — pile of fresh cards for you.' },
-    { emoji: '🥲', text: 'Pour one out for the deck-taker.' },
-    { emoji: '📚', text: 'Reading material.' },
-    { emoji: '🫠', text: 'Stack of shame, that.' },
-    { emoji: '🤐', text: 'Don\'t mug it off again.' },
-  ],
-  aceCalled: [
-    { emoji: '🎩', text: 'Ohhhh fancy, calling the suit.' },
-    { emoji: '👑', text: 'High and mighty.' },
-    { emoji: '🤌', text: 'Big-brain move.' },
-    { emoji: '🪄', text: 'Magic that.' },
-  ],
-  general: [
-    { emoji: '👍', text: 'Nice one.' },
-    { emoji: '🙄', text: 'Was that it?' },
-    { emoji: '😐', text: 'Decent enough, I s\'pose.' },
-    { emoji: '💅', text: 'Cool as.' },
-    { emoji: '🤷', text: 'Eh.' },
-    { emoji: '🤨', text: 'Hmm.' },
-    { emoji: '🫥', text: 'Forgettable.' },
-  ],
-};
-const REACTION_PRIORITY = ['fourOfKind','finished','soloKing','chainTaken','chainCancel','chainAdd','aceCalled','burn','reverse','skip','blindBad','blindGood','pickUp','reset','general'];
-
-function maybeShowReactions() {
-  if (!state || state.phase !== 'play' && state.phase !== 'over') return;
-  const tags = state.lastEventTags || [];
-  const movePlayerId = state.lastEventPlayer;
-  if (movePlayerId == null) return;
-
-  let pool = REACTIONS.general;
-  for (const tag of REACTION_PRIORITY) {
-    if (tags.includes(tag) && REACTIONS[tag]) { pool = REACTIONS[tag]; break; }
-  }
-  // Only bots auto-react. Real players (vs-bots: the local human; pass-and-play and
-  // online: every human at the table) decide for themselves when to drop an emoji
-  // via the picker — putting words in their mouth would feel awful.
-  const others = state.players.filter(p => p.id !== movePlayerId && !p.finished && !p.isHuman);
-  if (others.length === 0) return;
-
-  // 70% chance one player reacts; 25% two react; 5% silence (still feels alive without spam).
-  const roll = Math.random();
-  if (roll < 0.05) return;
-  const count = roll < 0.75 ? 1 : Math.min(2, others.length);
-  const shuffled = others.slice().sort(() => Math.random() - 0.5).slice(0, count);
-  shuffled.forEach((reactor, i) => {
-    const r = pool[Math.floor(Math.random() * pool.length)];
-    setTimeout(() => showReactionBubble(reactor.id, r), i * 350);
-  });
-}
-
-function showReactionBubble(playerId, reaction, fromHuman) {
-  document.querySelectorAll('.reaction[data-player="' + playerId + '"]').forEach(el => el.remove());
-  const target = (playerId === myPlayerId)
-    ? document.querySelector('.me-area')
-    : document.querySelector('.opponent[data-player="' + playerId + '"]');
-  if (!target) return;
-  const player = state && state.players ? state.players[playerId] : null;
-  const name   = player ? player.name : '';
-  const bubble = document.createElement('div');
-  bubble.className = 'reaction' + (fromHuman ? ' from-human' : '');
-  bubble.dataset.player = playerId;
-  bubble.innerHTML = `<span class="r-name">${escapeHtml(name)}</span><span class="r-emoji">${reaction.emoji}</span><span class="r-text">${escapeHtml(reaction.text)}</span>`;
-  target.appendChild(bubble);
-  setTimeout(() => bubble.classList.add('fade'), 2600);
-  setTimeout(() => { if (bubble.parentNode) bubble.remove(); }, 3100);
 }
 
 // Apply a unique animation to the just-played top card based on its rank/suit. Each special
@@ -3317,9 +3158,8 @@ function backToLobby() {
   swapSelected = { hand: null, faceUp: null };
   if (net) { try { net.cleanup(); } catch (e) {} net = null; }
   // Clear any DOM ephemera left over from the previous game so a new game starts clean:
-  // floating reaction bubbles, thinking dots, burn flashes, modals/passover screens, and
-  // the right-rail action log feed.
-  document.querySelectorAll('.passover, .modal-overlay, .reaction, .thinking, .burn-flash, .disconnect-banner').forEach(el => el.remove());
+  // thinking dots, burn flashes, modals/passover screens, and the right-rail action log.
+  document.querySelectorAll('.passover, .modal-overlay, .thinking, .burn-flash, .disconnect-banner').forEach(el => el.remove());
   resetActionLog();
   $('table').classList.remove('active');
   $('lobby').classList.add('active');
@@ -3728,18 +3568,6 @@ function showHostLobby(ws, roomCode, hostName) {
         return;
       }
       applyMove(msg.move, msg.playerId);
-    } else if (msg.type === 'reaction' && state) {
-      // A client posted an emoji. Show it locally and re-broadcast to the OTHER clients
-      // (not back to the sender). The reaction is attributed to the sender's playerId.
-      const c = connections.find(c => c.connId === msg.from);
-      if (!c || c.playerId == null) return;
-      const reaction = { emoji: String(msg.emoji || ''), text: String(msg.text || '') };
-      showReactionBubble(c.playerId, reaction, true);
-      Sound.sfx('reaction');
-      connections.forEach(other => {
-        if (other.connId === msg.from) return;
-        sendTo(other.connId, { type: 'reaction', playerId: c.playerId, ...reaction });
-      });
     }
   });
   ws.addEventListener('close', (ev) => {
@@ -3767,10 +3595,6 @@ function showHostLobby(ws, roomCode, hostName) {
         if (c.playerId == null) return;
         sendTo(c.connId, { type: 'state', state: serializeStateFor(state, c.playerId) });
       });
-    },
-    broadcastReaction(reaction) {
-      // reaction = { playerId, emoji, text }. Sent to every connected client.
-      connections.forEach(c => sendTo(c.connId, { type: 'reaction', ...reaction }));
     },
   };
 
@@ -3883,12 +3707,6 @@ function joinRoom(roomId, myName) {
       // is null and this is a no-op.
       triggerFlyIfPending();
       if (state.phase === 'over') showGameOver();
-    } else if (data.type === 'reaction' && state) {
-      // Someone else (the host or another client, relayed via host) posted an emoji.
-      const reactor = (data.playerId != null) ? state.players[data.playerId] : null;
-      if (!reactor) return;
-      showReactionBubble(reactor.id, { emoji: String(data.emoji || ''), text: String(data.text || '') }, true);
-      Sound.sfx('reaction');
     } else if (data.type === 'hostLeft') {
       // Host disconnected — relay will close us next, but show a clear banner now.
       if (state) {
@@ -4031,92 +3849,6 @@ if (_stepBtn) {
     botTurn();
   });
 }
-
-// Emoji picker — human reactions. Each emoji has a pool of 10 lines that cycle randomly,
-// avoiding the most-recent line so consecutive clicks of the same button feel fresh.
-const EMOJI_LINES = {
-  '👏': [
-    "Nice one.", "Tidy that, mate.", "Class move.", "Look at the brain on you.",
-    "Pure quality, that.", "Top shelf.", "Standing ovation, get the trumpets.",
-    "Behave yourself, that was lovely.", "Had to be done.", "Oh mama, gorgeous play.",
-  ],
-  '🔥': [
-    "Absolute weapon!", "Flatten 'em!", "Cooking with petrol.", "Sheer carnage.",
-    "Opponents in shambles.", "Boomshakalaka.", "Setting the table on fire.",
-    "Take a bow, you menace.", "That's a war crime.", "Somebody call the council.",
-  ],
-  '🤣': [
-    "Absolute melt.", "I'm wheezing.", "What was that, exactly?",
-    "Laugh? I nearly bought a round.", "Pure comedy, no notes.", "Pop that on YouTube.",
-    "Dignity: sold.", "Never recovering from that.", "Bin it, mate.",
-    "Shakespeare couldn't write that.",
-  ],
-  '😬': [
-    "Ouch, mate.", "Yikes on bikes.", "That's gonna sting.", "Felt that one in me bones.",
-    "Hurts to watch.", "Eyes off, eyes off.", "Emotional damage.", "I need a lie down.",
-    "Hold this for a sec.", "That was unprovoked.",
-  ],
-  '💀': [
-    "RIP.", "Get the priest.", "Game's over for them, send flowers.", "Toe-tagged.",
-    "Buried with full honours.", "The morgue is full.", "F in the chat.",
-    "Gone but not forgotten.", "Notify their next of kin.", "Cause of death: that.",
-  ],
-  '🙄': [
-    "Was that it?", "Astonishing nothing.", "Riveting stuff, truly.",
-    "I've seen better in a Blackpool car park.", "Granny does it better.",
-    "Whelmed. Just whelmed.", "Cheers for that, I suppose.", "Slow clap.",
-    "We're all so impressed.", "Yawn factory.",
-  ],
-  '🥲': [
-    "Bless ya.", "It's alright, sweetheart.", "We've all been there.",
-    "Pop the kettle on, eh.", "There, there.", "Chin up, troops.", "Tough crowd, this.",
-    "Nan would be proud (probably).", "Brave attempt.", "Walk it off, champ.",
-  ],
-  '👑': [
-    "Royalty.", "Bow to the monarch.", "Coronation imminent.", "Get a throne in here.",
-    "Your majesty, please.", "Top of the food chain.", "All hail.", "Sceptre energy.",
-    "Born to rule.", "The realm is yours.",
-  ],
-  '🤡': [
-    "Clown energy.", "Honk honk.", "Get back in the car, all of you.",
-    "Big top tonight, is it?", "Three-ring solo performance.", "Make-up's running, love.",
-    "Bozo behaviour.", "The circus called, they want their act back.",
-    "Comedy gold (the bad kind).", "Send in the clowns — oh wait.",
-  ],
-  '🍵': [
-    "Brew incoming.", "Get the kettle on.", "Tea duty for you, pal.",
-    "Builders, two sugars, quick smart.", "The realm demands a brew.", "Cuppa o'clock.",
-    "Dunk a digestive while you're at it.", "Earl Grey, strictly.",
-    "I take mine milky, ta.", "Less crying, more boiling.",
-  ],
-};
-const _emojiLastIdx = {}; // remembers last picked index per emoji to avoid repeats
-function pickEmojiLine(emoji, fallback) {
-  const pool = EMOJI_LINES[emoji];
-  if (!pool || !pool.length) return fallback || '';
-  const last = _emojiLastIdx[emoji];
-  let idx = Math.floor(Math.random() * pool.length);
-  if (pool.length > 1 && idx === last) idx = (idx + 1) % pool.length;
-  _emojiLastIdx[emoji] = idx;
-  return pool[idx];
-}
-document.querySelectorAll('#emoji-picker .emoji-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (!state || state.phase !== 'play') return;
-    Idle.bump();
-    const emoji = btn.dataset.emoji;
-    const text  = pickEmojiLine(emoji, btn.dataset.text || '');
-    showReactionBubble(myPlayerId, { emoji, text }, true);
-    Sound.sfx('reaction');
-    // Sync to other players in online modes. Host broadcasts to all clients;
-    // a joined client sends to host (which re-broadcasts to everyone else).
-    if (mode === 'online-host' && net && net.broadcastReaction) {
-      net.broadcastReaction({ playerId: myPlayerId, emoji, text });
-    } else if (mode === 'online-join' && net && net.sendToHost) {
-      net.sendToHost({ type: 'reaction', emoji, text });
-    }
-  });
-});
 
 // Hand sort selector — changing it re-renders with FLIP animation moving cards into place.
 const handSortEl = $('hand-sort');
