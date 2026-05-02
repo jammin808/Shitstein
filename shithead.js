@@ -3303,7 +3303,7 @@ function startLocalGame(names, humansArr, primaryHumanId) {
 // the host socket and the client sockets in a given room.
 //
 // Set RELAY_URL to YOUR deployed worker's wss:// URL — see /relay/README.md.
-const RELAY_URL = 'wss://shitstein-relay.YOUR-CF-SUBDOMAIN.workers.dev';
+const RELAY_URL = 'wss://shitstein.b-rohleder.workers.dev';
 function relayConfigured() { return !RELAY_URL.includes('YOUR-CF-SUBDOMAIN'); }
 
 // Short, readable, hard-to-confuse room codes (no 0/O, no 1/I/L).
