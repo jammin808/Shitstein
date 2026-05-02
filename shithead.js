@@ -1301,9 +1301,15 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
     while (p.hand.length < 3 && state.deck.length > 0) p.hand.push(state.deck.pop());
   }
 
-  // ---- Solo-King penalty ----
+  // ---- King-on-top penalty ----
+  // House rule: any play that LEAVES a King on top of the discard draws +1 from the
+  // deck — single-card K, or any chain ending on a K (e.g. Q♠ → K♠). The player
+  // should have followed on (K-chain extension lets a same-suit card or another K
+  // chain after the K). Burned Ks don't penalise (the pile is gone, the K isn't on
+  // top). Empty deck = no penalty (nothing to draw).
   let kingPenalty = false;
-  if (cards.length === 1 && lead.rank === 'K' && state.deck.length > 0) {
+  const _lastSurv = survivors[survivors.length - 1];
+  if (_lastSurv && _lastSurv.rank === 'K' && state.deck.length > 0) {
     p.hand.push(state.deck.pop());
     kingPenalty = true;
   }
@@ -1388,7 +1394,7 @@ function playCards(state, source, indices, aceSuit, calledSuits) {
        : (chainCancel > 0 ? ' ✋ Black Jack cancelled.' : ''));
   const aceMsg   = survA > 0  ? ` 🎩 Suit called: ${SUIT_SYM[aceSuit]}.` : '';
   const againMsg = goAgain    ? ' Plays again.'                        : '';
-  const kpMsg    = kingPenalty ? ' 👑 Solo King — drew an extra card.' : '';
+  const kpMsg    = kingPenalty ? ' 👑 King on top — drew a card from the deck.' : '';
   state.lastEvent = `${p.name} plays ${cardList}.${burnMsg}${revMsg}${skipMsg}${chainMsg}${aceMsg}${againMsg}${kpMsg}`;
   state.lastEventTags = tags;
   state.lastEventPlayer = p.id;
@@ -1440,9 +1446,11 @@ function blindFlip(state, faceDownIdx) {
       state.topPlayedAtTurn = state.turnCount;
     }
 
-    // Solo-King penalty (blind flip is always solo)
+    // King-on-top penalty (blind flip is single-card by definition; only fires if
+    // the K survived — a four-of-a-kind burn that takes a K off the pile doesn't
+    // leave a K on top, so no penalty).
     let kingPenalty = false;
-    if (card.rank === 'K' && state.deck.length > 0) {
+    if (!burned && card.rank === 'K' && state.deck.length > 0) {
       p.hand.push(state.deck.pop());
       kingPenalty = true;
     }
@@ -1488,7 +1496,7 @@ function blindFlip(state, faceDownIdx) {
       : (chainCancel > 0 ? ' ✋ Black Jack cancelled.' : '');
     const aceMsg   = aceCalled   ? ` 🎩 Suit defaulted to ${SUIT_SYM[card.suit]}.` : '';
     const againMsg = goAgain     ? ' Plays again.'                        : '';
-    const kpMsg    = kingPenalty ? ' 👑 Solo King — drew a card.'          : '';
+    const kpMsg    = kingPenalty ? ' 👑 King on top — drew a card from the deck.' : '';
     state.lastEvent = `${p.name} flips ${card.rank}${SUIT_SYM[card.suit]} blind — and it plays!${burnMsg}${revMsg}${skipMsg}${chainMsg}${aceMsg}${againMsg}${kpMsg}`;
     state.lastEventTags = tags;
     state.lastEventPlayer = p.id;
@@ -1657,7 +1665,8 @@ function botMove(state) {
     return move;
   }
 
-  // Helper: pick the best chain card for a solo King to dodge the penalty.
+  // Helper: pick the best chain card to follow a King and dodge the King-on-top
+  // penalty (+1 from the deck if the play ends on a K).
   // Allowed: another K, any A, any 10, or a same-suit-as-a-played-K non-K card.
   // Priority: don't waste high-value specials. Use cheap same-suit cards first; save 10s and Aces.
   const findKingChain = (kIdx) => {

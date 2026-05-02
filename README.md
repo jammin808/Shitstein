@@ -31,7 +31,7 @@ Plus a few house rules (see below).
 | **10** | Burn / wild lead. Single-card 10 plays on anything (incl. a pickup chain) and clears the pile. As a chain link a 10 must follow numerical sequence. |
 | **J** | Plays on another Jack or in suit. Black Jacks (♠ ♣) add +5 to the pickup chain; red Jacks (♥ ♦) cancel a black Jack. **Blocks 8** as the lead on a Jack-topped pile. **Blocks Ace** specifically on a black Jack while the deck still has cards (Ace plays on a red Jack always, and on a black Jack once the deck is empty). |
 | **Q** | Reverse + lock. Plays on another Q or in suit. Once on top, only Q / 2 / 10 / A / higher-same-suit may follow. |
-| **K** | Royal demand. Plays on another K or in suit. Cannot follow a freshly-placed 2 / 8 / J — the previous player must have had a turn to react. Solo King draws +1 from the deck. |
+| **K** | Royal demand. Plays on another K or in suit. Cannot follow a freshly-placed 2 / 8 / J — the previous player must have had a turn to react. **Any play that ends on a K draws +1 from the deck** — solo K, or a chain ending on K (e.g. Q♠ → K♠). The player should have followed on (K-chain extension lets a same-suit card or another K chain after a K). No penalty when the deck is empty or the K burns as part of a 4-of-a-kind. |
 | **A** | Wild. Plays at any time **except** after a 2 (always blocked), an 8 (skip-lock), or a black Jack while the deck still has cards. Plays on a red Jack always; plays on a black Jack once the deck is empty. Names the suit the next player must follow. |
 | **4 of a kind** | Burns the pile (any rank, including specials). |
 
