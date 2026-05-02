@@ -113,6 +113,11 @@ export class Room {
       try { msg = JSON.parse(data); } catch (_) { return; }
       if (!msg || typeof msg !== 'object') return;
 
+      // Keep-alive pings are absorbed here. The act of receiving them resets the
+      // edge's idle timer (which would otherwise close the socket after ~100s),
+      // so we don't need to forward or reply — just drop.
+      if (msg.type === 'ping') return;
+
       if (role === 'host') {
         // Special: host kicks a client. Close that socket politely.
         if (msg.type === 'kick' && typeof msg.to === 'number') {

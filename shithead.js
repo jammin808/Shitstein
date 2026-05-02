@@ -2915,7 +2915,10 @@ function maybeShowReactions() {
   for (const tag of REACTION_PRIORITY) {
     if (tags.includes(tag) && REACTIONS[tag]) { pool = REACTIONS[tag]; break; }
   }
-  const others = state.players.filter(p => p.id !== movePlayerId && !p.finished);
+  // Only bots auto-react. Real players (vs-bots: the local human; pass-and-play and
+  // online: every human at the table) decide for themselves when to drop an emoji
+  // via the picker — putting words in their mouth would feel awful.
+  const others = state.players.filter(p => p.id !== movePlayerId && !p.finished && !p.isHuman);
   if (others.length === 0) return;
 
   // 70% chance one player reacts; 25% two react; 5% silence (still feels alive without spam).
@@ -3498,6 +3501,18 @@ function showHostLobby(ws, roomCode, hostName) {
         return;
       }
       applyMove(msg.move, msg.playerId);
+    } else if (msg.type === 'reaction' && state) {
+      // A client posted an emoji. Show it locally and re-broadcast to the OTHER clients
+      // (not back to the sender). The reaction is attributed to the sender's playerId.
+      const c = connections.find(c => c.connId === msg.from);
+      if (!c || c.playerId == null) return;
+      const reaction = { emoji: String(msg.emoji || ''), text: String(msg.text || '') };
+      showReactionBubble(c.playerId, reaction, true);
+      Sound.sfx('reaction');
+      connections.forEach(other => {
+        if (other.connId === msg.from) return;
+        sendTo(other.connId, { type: 'reaction', playerId: c.playerId, ...reaction });
+      });
     }
   });
   ws.addEventListener('close', (ev) => {
@@ -3510,13 +3525,25 @@ function showHostLobby(ws, roomCode, hostName) {
     }
   });
 
+  // Keep-alive: Cloudflare drops idle WebSockets after ~100s of silence. Send a tiny
+  // ping every 30s so the relay keeps the socket open between moves. The relay drops
+  // pings (doesn't forward); we just want the activity to reset its idle timer.
+  const hostPingTimer = setInterval(() => {
+    if (ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'ping' })); } catch (_) {} }
+  }, 30000);
+  ws.addEventListener('close', () => clearInterval(hostPingTimer));
+
   net = {
-    cleanup() { try { ws.close(); } catch (e) {} },
+    cleanup() { try { ws.close(); } catch (e) {} clearInterval(hostPingTimer); },
     broadcastState() {
       connections.forEach(c => {
         if (c.playerId == null) return;
         sendTo(c.connId, { type: 'state', state: serializeStateFor(state, c.playerId) });
       });
+    },
+    broadcastReaction(reaction) {
+      // reaction = { playerId, emoji, text }. Sent to every connected client.
+      connections.forEach(c => sendTo(c.connId, { type: 'reaction', ...reaction }));
     },
   };
 
@@ -3582,8 +3609,15 @@ function joinRoom(roomId, myName) {
       $('cfg-join').disabled = false;
       $('cfg-join').textContent = 'Join';
     }
-  }, 10000);
+  }, 20000);
   let welcomeTimeout = null;
+
+  // Keep-alive: Cloudflare drops idle WebSockets after ~100s. A tiny ping every 30s
+  // keeps the relay's idle timer reset between human moves (which can be slow).
+  // The relay drops pings without forwarding; we just need traffic on the pipe.
+  const joinPingTimer = setInterval(() => {
+    if (ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'ping' })); } catch (_) {} }
+  }, 30000);
 
   ws.addEventListener('open', () => {
     opened = true;
@@ -3593,7 +3627,7 @@ function joinRoom(roomId, myName) {
     catch (e) { $('join-status').textContent = 'Could not send hello: ' + (e.message || e); }
     welcomeTimeout = setTimeout(() => {
       $('join-status').textContent = "Connected but the host didn't acknowledge. They might still be loading — wait a moment, or refresh and try again.";
-    }, 8000);
+    }, 20000);
   });
 
   ws.addEventListener('message', (ev) => {
@@ -3617,6 +3651,12 @@ function joinRoom(roomId, myName) {
       syncActionLogFromState();
       renderTable();
       if (state.phase === 'over') showGameOver();
+    } else if (data.type === 'reaction' && state) {
+      // Someone else (the host or another client, relayed via host) posted an emoji.
+      const reactor = (data.playerId != null) ? state.players[data.playerId] : null;
+      if (!reactor) return;
+      showReactionBubble(reactor.id, { emoji: String(data.emoji || ''), text: String(data.text || '') }, true);
+      Sound.sfx('reaction');
     } else if (data.type === 'hostLeft') {
       // Host disconnected — relay will close us next, but show a clear banner now.
       if (state) {
@@ -3633,6 +3673,7 @@ function joinRoom(roomId, myName) {
   ws.addEventListener('close', (ev) => {
     clearTimeout(connectTimeout);
     clearTimeout(welcomeTimeout);
+    clearInterval(joinPingTimer);
     if (!opened) {
       $('join-status').textContent = 'Could not connect to the relay (' + (ev.reason || `code ${ev.code}`) + '). Check your room code and try again.';
       $('cfg-join').disabled = false;
@@ -3651,7 +3692,7 @@ function joinRoom(roomId, myName) {
   });
 
   net = {
-    cleanup() { try { ws.close(); } catch (e) {} },
+    cleanup() { try { ws.close(); } catch (e) {} clearInterval(joinPingTimer); },
     sendToHost(msg) {
       try { ws.send(JSON.stringify(msg)); }
       catch (e) { console.warn('sendToHost failed', e); }
@@ -3835,6 +3876,13 @@ document.querySelectorAll('#emoji-picker .emoji-btn').forEach(btn => {
     const text  = pickEmojiLine(emoji, btn.dataset.text || '');
     showReactionBubble(myPlayerId, { emoji, text }, true);
     Sound.sfx('reaction');
+    // Sync to other players in online modes. Host broadcasts to all clients;
+    // a joined client sends to host (which re-broadcasts to everyone else).
+    if (mode === 'online-host' && net && net.broadcastReaction) {
+      net.broadcastReaction({ playerId: myPlayerId, emoji, text });
+    } else if (mode === 'online-join' && net && net.sendToHost) {
+      net.sendToHost({ type: 'reaction', emoji, text });
+    }
   });
 });
 
