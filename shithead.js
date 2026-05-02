@@ -2064,6 +2064,96 @@ function renderCard(card, opts = {}) {
 }
 
 // --------- main render ---------
+// Card-fly animation state. When the human plays a card (or chain), we capture the
+// hand/reserve DOM rects of the selected cards BEFORE state mutates, then after the
+// new discard renders we spawn floating overlays that animate from each captured
+// rect to the corresponding new discard card's position. The discard cards themselves
+// are added with a `.no-entrance` class + visibility:hidden so the existing card-land
+// / fan-card-land entrance animation doesn't fight the fly. Each card is revealed at
+// the moment its flying overlay lands.
+let _pendingFlyAnim = null;     // { items: [{ rect, card, source }], discardRect } or null
+function captureFlyData(sel) {
+  if (!state || !sel || !sel.length) return null;
+  const me = state.players[myPlayerId];
+  const handArea = $('me-hand');
+  const pairsEl = $('me-reserve-pairs');
+  const discardEl = $('discard');
+  if (!discardEl) return null;
+  const discardRect = discardEl.getBoundingClientRect();
+  const items = [];
+  for (const s of sel) {
+    const c = me[s.source] && me[s.source][s.idx];
+    if (!c) continue;
+    let el = null;
+    if (s.source === 'hand' && handArea) {
+      const key = `${c.rank}${c.suit}-${s.idx}`;
+      try { el = handArea.querySelector(`.card[data-card-key="${CSS.escape(key)}"]`); } catch (_) {}
+    } else if (s.source === 'faceUp' && pairsEl) {
+      const pairs = pairsEl.querySelectorAll('.reserve-pair');
+      const pair = pairs[s.idx];
+      if (pair) el = pair.querySelector('.reserve-up');
+    }
+    if (el) items.push({ rect: el.getBoundingClientRect(), card: c, source: s.source });
+  }
+  if (!items.length) return null;
+  return { items, discardRect };
+}
+function triggerFlyIfPending() {
+  if (!_pendingFlyAnim) return;
+  const { items } = _pendingFlyAnim;
+  _pendingFlyAnim = null;
+  const discardEl = $('discard');
+  if (!discardEl) return;
+  const targets = Array.from(discardEl.querySelectorAll('.card.no-entrance'));
+  if (!targets.length) return;
+  const STAGGER = 90;
+  const FLIGHT  = 380;
+  items.forEach((item, i) => {
+    const target = targets[i] || targets[targets.length - 1];
+    if (!target) return;
+    const targetRect = target.getBoundingClientRect();
+    const fly = document.createElement('div');
+    fly.className = 'card fly-card';
+    if (item.card.rank === '2')  fly.classList.add('special-2');
+    if (item.card.rank === '10') fly.classList.add('special-10');
+    if (item.card.suit === 'H' || item.card.suit === 'D') fly.classList.add('red'); else fly.classList.add('black');
+    fly.innerHTML = renderCardSVG(item.card);
+    fly.style.position = 'fixed';
+    fly.style.left = item.rect.left + 'px';
+    fly.style.top  = item.rect.top  + 'px';
+    fly.style.width  = item.rect.width  + 'px';
+    fly.style.height = item.rect.height + 'px';
+    fly.style.margin = '0';
+    fly.style.zIndex = String(2000 + i);
+    fly.style.pointerEvents = 'none';
+    fly.style.willChange = 'transform';
+    fly.style.transition = `transform ${FLIGHT}ms cubic-bezier(0.34, 1.18, 0.64, 1)`;
+    document.body.appendChild(fly);
+    const sx = item.rect.left + item.rect.width  / 2;
+    const sy = item.rect.top  + item.rect.height / 2;
+    const tx = targetRect.left + targetRect.width  / 2;
+    const ty = targetRect.top  + targetRect.height / 2;
+    const dx = tx - sx;
+    const dy = ty - sy;
+    const scale = (item.rect.width > 0) ? (targetRect.width / item.rect.width) : 1;
+    // Stagger launch with two RAFs so the initial position is committed first.
+    const launch = () => {
+      fly.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    };
+    const startDelay = i * STAGGER;
+    if (startDelay === 0) {
+      requestAnimationFrame(() => requestAnimationFrame(launch));
+    } else {
+      setTimeout(() => requestAnimationFrame(launch), startDelay);
+    }
+    setTimeout(() => {
+      target.classList.remove('no-entrance');
+      target.style.visibility = '';
+      try { fly.remove(); } catch (_) {}
+    }, startDelay + FLIGHT);
+  });
+}
+
 // Track which play we've already animated so the entrance class is only added on the
 // render for a NEW play — re-renders during the same play (e.g. hand sort, idle ticks)
 // don't retrigger card-land. Reset to null on any state change that wipes lastPlayCards.
@@ -2183,29 +2273,45 @@ function renderTable() {
       const requiredOverlap = N > 1 ? 1 - (maxExtensionPx / ((N - 1) * cardWPx)) : 0;
       if (requiredOverlap > overlap) overlap = Math.min(maxOverlap, requiredOverlap);
       const offsetFraction = -(1 - overlap); // negative = shifts left
+      const flying = !!_pendingFlyAnim;
       chain.forEach((c, i) => {
         const card = renderCard(c, { help: false });
         card.classList.add('fan-card');
         const offsetSteps = (chain.length - 1 - i);
         card.style.left = `calc(var(--card-w) * ${offsetFraction} * ${offsetSteps})`;
         card.style.zIndex = String(i + 1);
-        card.style.animationDelay = `${i * 70}ms`;
+        if (flying) {
+          // Suppress the fan-card-land entrance — the fly overlay will deliver each card
+          // and reveal it on landing. .no-entrance kills the keyframe animation; the
+          // inline visibility:hidden keeps it invisible until the fly lands.
+          card.classList.add('no-entrance');
+          card.style.visibility = 'hidden';
+        } else {
+          card.style.animationDelay = `${i * 70}ms`;
+        }
         fan.appendChild(card);
       });
       discardEl.appendChild(fan);
     } else {
       discardEl.classList.remove('has-fan');
       const topCardEl = renderCard(top);
-      // For a brand-new single-card play, attach .fresh (+ any fx-* class) at DOM-creation
-      // time so the entrance animation property is on the element from its first paint.
-      // Applying these classes AFTER insertion (the old postMoveProcessing path) caused a
-      // brief paint at "landed" state followed by the animation jumping to keyframe-0 and
-      // playing — i.e. the card appearing twice within milliseconds.
-      const playKey = _currentPlayKey();
-      if (playKey && playKey !== _lastFreshPlayKey) {
-        topCardEl.classList.add('fresh');
-        const fxCls = _fxClassForLastCard();
-        if (fxCls) topCardEl.classList.add(fxCls);
+      const flying = !!_pendingFlyAnim;
+      if (flying) {
+        // Same suppression for single-card plays. The fly overlay will reveal it.
+        topCardEl.classList.add('no-entrance');
+        topCardEl.style.visibility = 'hidden';
+      } else {
+        // For a brand-new single-card play, attach .fresh (+ any fx-* class) at DOM-creation
+        // time so the entrance animation property is on the element from its first paint.
+        // Applying these classes AFTER insertion (the old postMoveProcessing path) caused a
+        // brief paint at "landed" state followed by the animation jumping to keyframe-0 and
+        // playing — i.e. the card appearing twice within milliseconds.
+        const playKey = _currentPlayKey();
+        if (playKey && playKey !== _lastFreshPlayKey) {
+          topCardEl.classList.add('fresh');
+          const fxCls = _fxClassForLastCard();
+          if (fxCls) topCardEl.classList.add(fxCls);
+        }
       }
       discardEl.appendChild(topCardEl);
     }
@@ -2291,7 +2397,11 @@ function renderTable() {
           if (swapSelected.faceUp === i) up.classList.add('selected');
           up.addEventListener('click', () => onSwapFaceUpClick(i));
         } else if (state.phase === 'play' && state.current === myPlayerId && myActive === 'faceUp') {
-          if (isSelected('faceUp', i)) up.classList.add('selected');
+          if (isSelected('faceUp', i)) {
+            up.classList.add('selected');
+            const ord = selectionOrder('faceUp', i);
+            if (ord) up.dataset.order = String(ord);
+          }
           if (canSelect('faceUp', me.faceUp[i])) {
             up.classList.add('clickable');
             up.addEventListener('click', () => onCardClick('faceUp', i));
@@ -2339,7 +2449,11 @@ function renderTable() {
       if (swapSelected.hand === i) card.classList.add('selected');
       card.addEventListener('click', () => onSwapHandClick(i));
     } else if (state.phase === 'play' && state.current === myPlayerId && myActive === 'hand') {
-      if (isSelected('hand', i)) card.classList.add('selected');
+      if (isSelected('hand', i)) {
+        card.classList.add('selected');
+        const ord = selectionOrder('hand', i);
+        if (ord) card.dataset.order = String(ord);
+      }
       if (canSelect('hand', c)) {
         card.classList.add('clickable');
         card.addEventListener('click', () => onCardClick('hand', i));
@@ -2377,6 +2491,15 @@ function renderTable() {
 // --------- selection helpers ---------
 function isSelected(source, idx) {
   return selected.some(s => s.source === source && s.idx === idx);
+}
+// 1-based position in the chain (or 0 if not selected). Used for the order badge
+// shown on each selected card in hand / face-up reserve while the player builds
+// a multi-card play.
+function selectionOrder(source, idx) {
+  for (let i = 0; i < selected.length; i++) {
+    if (selected[i].source === source && selected[i].idx === idx) return i + 1;
+  }
+  return 0;
 }
 function canSelect(source, card) {
   if (selected.length === 0) return canPlayCard(card, state);
@@ -2591,10 +2714,20 @@ function onPlayClick() {
     for (let i = selected.length - 1; i >= 0; i--) {
       if (cards[i].rank === 'A') { aceSuit = selected[i].calledSuit || 'S'; break; }
     }
+    // Capture rects in selection order BEFORE state mutates / hand DOM is rebuilt.
+    // The fly is triggered after the resulting renderTable adds .no-entrance discard
+    // cards — see triggerFlyIfPending.
+    _pendingFlyAnim = captureFlyData(selected);
     selected = [];
     sendOrApplyMove(anyAce
       ? { type: 'play', source, indices, aceSuit: aceSuit || 'S', calledSuits }
       : { type: 'play', source, indices });
+    // For local modes (vs-bots / pass-and-play / online-host) applyMove ran synchronously
+    // and the discard's already been re-rendered with .no-entrance cards waiting for us.
+    // For online-join, the move was sent to the host and the local renderTable hasn't run
+    // yet — the state-receive handler will call triggerFlyIfPending() when the host's
+    // state packet arrives, so the captured rects survive that round-trip.
+    if (mode !== 'online-join') triggerFlyIfPending();
   }
 }
 
@@ -3706,6 +3839,11 @@ function joinRoom(roomId, myName) {
       $('table').classList.add('active');
       syncActionLogFromState();
       renderTable();
+      // If THIS client just submitted a move, run the captured fly animation now that
+      // the host has come back with the new state. (Captured in onPlayClick before the
+      // round-trip.) For state updates triggered by other players' moves, _pendingFlyAnim
+      // is null and this is a no-op.
+      triggerFlyIfPending();
       if (state.phase === 'over') showGameOver();
     } else if (data.type === 'reaction' && state) {
       // Someone else (the host or another client, relayed via host) posted an emoji.

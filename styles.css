@@ -763,6 +763,49 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 .card.selected .card-bg { stroke: var(--accent); stroke-width: 3; }
 .card.disabled         { opacity: 0.55; cursor: not-allowed; }
 .card.disabled:hover   { transform: none; }
+
+/* Order-of-play badge on each selected card while building a multi-card chain.
+   Pure CSS — driven by the `data-order` attribute the renderer sets. The number is
+   1-based (1 plays first). The badge sits in the top-right corner, gold-on-charcoal
+   to echo the brand wordmark, and only shows for orders > 0. */
+.card.selected[data-order]::after {
+  content: attr(data-order);
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #f3d27a 0%, #b6862e 100%);
+  color: #1d1d1d;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 22px;
+  text-align: center;
+  letter-spacing: 0;
+  border: 1.5px solid #fff5d8;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.45);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Disable any entrance animation on freshly-rendered discard cards while a fly
+   animation is in flight. The fly overlay is the entrance — once it lands the
+   card is revealed in its final position, no extra movement. */
+.card.no-entrance {
+  animation: none !important;
+}
+
+/* Floating overlay used during the play-to-discard fly. Inherits .card's
+   filter/shadow so the lift looks consistent with the card it just left,
+   and grows during flight via transform: scale to the discard's size. */
+.fly-card {
+  border-radius: 9px;
+  filter: drop-shadow(0 12px 22px rgba(0,0,0,0.45));
+  transform-origin: center center;
+}
 /* (No global card-appear animation — it was firing on every renderTable() and looked
    like a flash. Card animations are now scoped to actually-played cards on the discard:
    .fresh, .fan-card, and the special-card FX classes.) */
