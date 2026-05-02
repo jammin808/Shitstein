@@ -122,47 +122,56 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 .screen.active { display: block; }
 
 /* ======================= LOBBY ======================= */
-/* The lobby card sits on the felt as a cream "menu card". A thin gold inner rule
-   ties it to the brand wordmark; the heading echoes the brand typography (Georgia
-   serif + cream→gold gradient) so the welcome screen reads as part of the same
-   identity rather than a generic form. */
+/* "Cocktail menu" treatment — refined ecru paper, single warm-gold hairline,
+   serif headings, restrained palette. Lobby-scoped CSS variables override the
+   global ones inside this card so the felt-table UI is unaffected. */
 .lobby-card {
+  --paper:        #f4ede0;
+  --paper-deep:   #e9e0cb;
+  --paper-input:  #fbf7ec;
+  --ink:          #2a2620;
+  --ink-soft:     #6b6358;
+  --ink-mute:     #918774;
+  --rule:         rgba(140, 100, 40, 0.18);
+  --rule-strong:  rgba(140, 100, 40, 0.42);
+  --gold-warm:    #b08a3e;
+
   max-width: 760px;
   margin: 32px auto;
-  background: var(--cream);
+  background: var(--paper);
   color: var(--ink);
-  padding: 32px;
-  border-radius: 16px;
+  padding: 36px 36px 28px;
+  border-radius: 14px;
   box-shadow: var(--shadow-lg);
   position: relative;
-  border: 1px solid rgba(212, 162, 74, 0.35);
-}
-.lobby-card::before {
-  content: "";
-  position: absolute;
-  inset: 6px;
-  border-radius: 12px;
-  border: 1px solid rgba(212, 162, 74, 0.22);
-  pointer-events: none;
+  border: 1px solid var(--rule-strong);
 }
 .lobby-card h2 {
-  margin-top: 0;
+  margin: 0 0 4px;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 30px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   font-weight: 700;
-  background: linear-gradient(180deg, #1c4a30 0%, #0d3220 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--ink);
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
 }
 .lobby-card > p.muted {
   font-size: 14.5px;
   font-style: italic;
-  color: #6b6253;
-  margin-top: -2px;
+  color: var(--ink-soft);
+  margin: 14px 0 0;
 }
+.lobby-card .muted { color: var(--ink-soft); }
 .muted { color: var(--muted); }
+.lobby-card .footnote {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+  letter-spacing: 0.25px;
+}
 .footnote {
   font-size: 12px;
   color: var(--muted);
@@ -176,12 +185,12 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 14px;
-  margin-top: 24px;
+  margin-top: 22px;
 }
 .mode-btn {
-  background: linear-gradient(180deg, #ffffff 0%, #fbf5e6 100%);
-  border: 2px solid #e6deca;
-  border-radius: 12px;
+  background: var(--paper-input);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
   padding: 18px;
   text-align: left;
   color: var(--ink);
@@ -189,63 +198,118 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
   font-weight: 500;
 }
 .mode-btn:hover {
-  border-color: var(--accent);
+  border-color: var(--gold-warm);
   transform: translateY(-2px);
-  box-shadow: 0 8px 22px rgba(13, 50, 32, 0.18);
-  background: linear-gradient(180deg, #ffffff 0%, #fff5d8 100%);
+  box-shadow: 0 6px 18px rgba(42, 38, 32, 0.14);
+  background: #fffaf0;
 }
-.mode-btn:hover .mode-icon svg { color: var(--accent); transform: scale(1.08); }
+.mode-btn:hover .mode-icon svg { color: var(--gold-warm); transform: scale(1.06); }
 .mode-icon { font-size: 28px; height: 48px; display: flex; align-items: center; }
 .mode-icon svg {
-  width: 48px;
-  height: 48px;
-  color: var(--felt-deep);
+  width: 44px;
+  height: 44px;
+  color: var(--ink-soft);
   transition: transform 0.18s ease, color 0.18s ease;
 }
-.mode-title { font-weight: 700; font-size: 17px; margin: 8px 0 4px; }
-.mode-desc { color: var(--muted); font-size: 13px; font-weight: 400; }
+.mode-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-size: 17px;
+  margin: 10px 0 4px;
+  color: var(--ink);
+  letter-spacing: 0.2px;
+}
+.mode-desc { color: var(--ink-soft); font-size: 13px; font-weight: 400; line-height: 1.4; }
 
 .mode-config {
   margin-top: 22px;
-  padding: 20px;
-  background: #f6efd9;
-  border-radius: 12px;
+  padding: 20px 22px;
+  background: var(--paper-deep);
+  border-radius: 10px;
   color: var(--ink);
-  border: 1px solid rgba(212, 162, 74, 0.30);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  border: 1px solid var(--rule);
 }
 .mode-config h3 {
-  margin-top: 0;
-  color: var(--felt-deep);
+  margin: 0 0 12px;
+  color: var(--ink);
   font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
   letter-spacing: 0.3px;
+  font-weight: 700;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
 }
 .mode-config.hidden { display: none; }
-.mode-config label { display: block; margin: 8px 0; font-weight: 500; }
+.mode-config label { display: block; margin: 8px 0; font-weight: 500; color: var(--ink); }
 .mode-config input[type=text],
 .mode-config input[type=number],
 .mode-config select {
   margin-left: 8px;
   padding: 7px 10px;
   border-radius: 6px;
-  border: 1px solid #d2c89c;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-input);
+  color: var(--ink);
   font-size: 14px;
   font-family: inherit;
 }
-.mode-config .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.mode-config input[type=text]:focus,
+.mode-config input[type=number]:focus,
+.mode-config select:focus {
+  outline: none;
+  border-color: var(--gold-warm);
+  box-shadow: 0 0 0 3px rgba(180, 140, 70, 0.18);
+}
+.mode-config .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; color: var(--ink); }
 .mode-config .row input[type=text] { flex: 1; min-width: 120px; }
+.mode-config .row .muted { color: var(--ink-soft); font-weight: 500; }
+.mode-config p { color: var(--ink-soft); }
+.mode-config p.muted { color: var(--ink-soft); }
+
+/* Buttons inside the lobby — the global .ghost is light-on-dark for the felt UI
+   and reads as low-contrast on this paper. Override for both ghost and primary
+   so "+ Add bot", "remove", "Deal!" etc. land cleanly on the menu. */
+.lobby-card button.ghost {
+  background: var(--paper-input);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  font-weight: 600;
+}
+.lobby-card button.ghost:hover {
+  background: #fff;
+  border-color: var(--gold-warm);
+  color: var(--ink);
+}
+.lobby-card button.ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--paper-deep);
+  border-color: var(--rule);
+}
+.lobby-card button.primary {
+  background: var(--ink);
+  color: var(--paper);
+  letter-spacing: 0.4px;
+}
+.lobby-card button.primary:hover:not(:disabled) {
+  background: #1a1713;
+}
+.lobby-card button.primary:disabled {
+  background: var(--paper-deep);
+  color: var(--ink-mute);
+}
 
 .code-display {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 14px;
-  background: #fff;
+  background: #fbf7ec;
   padding: 10px 14px;
   border-radius: 8px;
   letter-spacing: 1px;
-  border: 2px dashed var(--accent);
+  border: 1px dashed rgba(140, 100, 40, 0.55);
   display: inline-block;
   cursor: pointer;
-  color: var(--ink);
+  color: #2a2620;
   word-break: break-all;
   max-width: 100%;
 }
@@ -256,13 +320,15 @@ button.warning:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .players-list li {
   padding: 8px 12px;
-  background: #fff;
+  background: #fbf7ec;
+  border: 1px solid rgba(140, 100, 40, 0.18);
   border-radius: 6px;
   margin: 6px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  color: #2a2620;
 }
 .players-list .lobby-kick {
   font-size: 12px;

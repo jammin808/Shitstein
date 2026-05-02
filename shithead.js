@@ -3394,8 +3394,7 @@ function buildAiConfig(cfg) {
   function updateAddButton() {
     const btn = $('cfg-add-bot');
     if (!btn) return;
-    btn.disabled = bots.length >= 4; // +1 human = 5 total cap
-    btn.style.opacity = btn.disabled ? '0.5' : '';
+    btn.disabled = bots.length >= 4; // +1 human = 5 total cap (CSS handles the disabled look)
   }
   renderBots();
   updateAddButton();
